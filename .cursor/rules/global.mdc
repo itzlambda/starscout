@@ -1,0 +1,8 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+- Dont forget to auto commit changes to git using the `git-auto-commit` rule.
+- read [SPECS.md](mdc:SPECS.md) to understand about the project specification.
+- use pnpm for javascript package manager

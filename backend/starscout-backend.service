@@ -1,0 +1,13 @@
+[Unit]
+Description=Starscout backend
+After=network.target
+
+[Service]
+Type=simple
+User=admin
+Group=admin
+WorkingDirectory=/home/admin/starscout/backend
+ExecStart=/bin/bash /home/admin/starscout/backend/run.sh
+
+[Install]
+WantedBy=multi-user.target
