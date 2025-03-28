@@ -12,11 +12,14 @@ import { GridBackground } from "@/components/ui/GridBackground";
 import { useEffect, useState, useCallback } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Session } from "next-auth"
+import { useBackendHealth } from "@/hooks/useBackendHealth";
+import { MaintenancePage } from "@/components/maintenance/MaintenancePage";
 
 const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL;
 
 export default function Home() {
   const { data: session }: { data: Session | null } = useSession();
+  const { isBackendHealthy } = useBackendHealth();
   const { processingStars, jobStatus, isRefreshing, refreshStars, startProcessing } = useGithubStars();
   const [totalStars, setTotalStars] = useState<number>(0);
   const [hasStartedProcessing, setHasStartedProcessing] = useState(false);
@@ -102,6 +105,10 @@ export default function Home() {
       setHasStartedProcessing(true);
     }
   };
+
+  if (!isBackendHealthy) {
+    return <MaintenancePage />;
+  }
 
   if (!session) {
     return (
