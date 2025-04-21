@@ -4,10 +4,7 @@ from abc import ABC, abstractmethod
 from tenacity import retry, stop_after_attempt, wait_exponential, RetryCallState
 
 from .settings import settings
-import openai
-from openai import OpenAI
-from google import genai
-from google.genai.types import EmbedContentResponse
+import litellm
 
 logger = logging.getLogger(__name__)
 
@@ -125,51 +122,74 @@ class GeminiEmbedding(EmbeddingProvider):
 
 
 class Embeddings:
-    def __init__(
-        self,
-        api_key: str,
-        provider: str = "openai",
-        model: str = "text-embedding-3-small",
-        **kwargs,
-    ):
-        self.provider = self._get_provider(api_key, provider, model, **kwargs)
-
-    def _get_provider(
-        self, api_key: str, provider: str, model: str, **kwargs
-    ) -> EmbeddingProvider:
-        providers = {
-            "openai": lambda: OpenAIEmbedding(api_key, model, **kwargs),
-            "gemini": lambda: GeminiEmbedding(api_key, model, **kwargs),
-        }
-
-        if provider not in providers:
-            raise ValueError(
-                f"Unsupported provider: {provider}. Available providers: {list(providers.keys())}"
-            )
-
-        return providers[provider]()
+    def __init__(self, model: str = settings.AI_MODEL_NAME):
+        self.model = model
+        # Configure litellm logger
+        litellm.set_verbose = False
 
     def get_embedding(self, text: str) -> List[float]:
+        """Generates an embedding for a single text using litellm."""
+        embeddings = self.get_embeddings([text])
+        return embeddings[0]
+
+    def get_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """Generates embeddings for a list of texts using litellm."""
         try:
-            return self.provider.get_embedding(text)
-        except Exception:
+            response = litellm.embedding(
+                model=self.model,
+                input=texts,
+                dimensions=settings.AI_EMBEDDING_VECTOR_DIMENSION,
+            )
+
+            if not response.data or not all(item.embedding for item in response.data):
+                # Attempt to log the raw response if available
+                raw_response_info = ""
+                if hasattr(response, "_response"):
+                    raw_response_info = f" Raw response: {response._response}"
+                elif hasattr(response, "response"):
+                    raw_response_info = f" Raw response: {response.response}"
+
+                logger.error(
+                    f"Invalid or empty embedding data received from litellm for model {self.model}. Response data: {response.data}.{raw_response_info}"
+                )
+                raise ValueError(
+                    f"Invalid or empty embedding data received from litellm for model {self.model}."
+                )
+
+            return [item.embedding for item in response.data]
+
+        except Exception as e:
+            # Catch potential litellm exceptions and general errors
+            logger.error(
+                f"LiteLLM embedding failed for model {self.model}: {str(e)}",
+                exc_info=True,
+            )
+            # Re-raise the exception to be handled upstream
             raise
 
     def check_api_key(self):
+        """
+        Performs a simple test embedding call to check if the API key
+        associated with the model is likely valid.
+        Relies on litellm finding the appropriate key from environment variables.
+        """
         try:
-            self.provider.check_api_key()
-        except Exception:
-            raise
+            logger.info(f"Performing API key check for model {self.model} via test embedding...")
+            # Use a short, simple text for the check
+            test_embedding = self.get_embedding("test")
+            if not test_embedding or not isinstance(test_embedding[0], float):
+                 raise ValueError("Test embedding result was invalid.")
+            logger.info(f"API key check successful for model {self.model}.")
+        except Exception as e:
+            logger.error(
+                f"API key check failed for model {self.model}. " f"Error: {str(e)}"
+            )
+            # Re-raise the exception to signal failure
+            raise ValueError(f"API key check failed for model {self.model}.") from e
 
-    def get_embeddings(self, texts: List[str]) -> List[List[float]]:
-        try:
-            return self.provider.get_embeddings(texts)
-        except Exception:
-            raise
 
-
+# Instantiate the Embeddings service using settings
+# LiteLLM will pick up the API key from environment variables based on the model
 embedding = Embeddings(
-    api_key=settings.AI_API_KEY,
-    provider=settings.AI_PROVIDER,
     model=settings.AI_MODEL_NAME,
 )
