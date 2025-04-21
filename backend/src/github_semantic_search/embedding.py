@@ -136,12 +136,13 @@ class Embeddings:
         """Generates embeddings for a list of texts using litellm."""
         try:
             response = litellm.embedding(
+                api_key=settings.AI_API_KEY,
                 model=self.model,
                 input=texts,
                 dimensions=settings.AI_EMBEDDING_VECTOR_DIMENSION,
             )
 
-            if not response.data or not all(item.embedding for item in response.data):
+            if not response.data or not all(item.get("embedding") for item in response.data):
                 # Attempt to log the raw response if available
                 raw_response_info = ""
                 if hasattr(response, "_response"):
@@ -156,7 +157,8 @@ class Embeddings:
                     f"Invalid or empty embedding data received from litellm for model {self.model}."
                 )
 
-            return [item.embedding for item in response.data]
+            # Access embedding using dictionary key
+            return [item["embedding"] for item in response.data]
 
         except Exception as e:
             # Catch potential litellm exceptions and general errors
