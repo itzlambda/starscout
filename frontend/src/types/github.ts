@@ -13,7 +13,7 @@ export interface Repository {
 
 export interface UserJob {
   id: number;
-  user_id: string;
+  user_id: string | number;
   status: string;
   total_repos: number;
   processed_repos: number;
@@ -21,4 +21,27 @@ export interface UserJob {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+}
+
+export interface ExistsResponse {
+  user_exists: boolean;
+}
+
+export interface JobStatusResponse {
+  job: UserJob | null;
+  is_running: boolean;
+  user_id: string | number;
+  total_active_jobs: number;
+  message?: string;
+}
+
+export interface SearchResult {
+  repository: Repository;
+  similarity_score: number;
+}
+
+export interface SearchResponse {
+  query: string;
+  total_count: number;
+  results: SearchResult[];
 } 
