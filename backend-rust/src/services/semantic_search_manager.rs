@@ -1,7 +1,7 @@
 use crate::db::Database;
-use crate::embedding::{EmbeddingError, OpenAIEmbeddingService, ToEmbeddingText};
+use crate::embedding::{EmbeddingError, OpenAIEmbeddingService};
 use crate::github::GitHubClient;
-use crate::types::Repository;
+use crate::types::repository::Repository;
 use sqlx::types::Decimal;
 use thiserror::Error;
 use tracing::{debug, error, info, warn};
@@ -145,10 +145,8 @@ impl SemanticSearchManager {
         }
 
         // Generate embeddings for all repositories in this batch
-        let embedding_texts: Vec<String> = processed_repos
-            .iter()
-            .map(|repo| repo.to_embedding_text())
-            .collect();
+        let embedding_texts: Vec<String> =
+            processed_repos.iter().map(repo_to_embedding_text).collect();
 
         let embeddings = self
             .embedding_service
@@ -320,4 +318,25 @@ impl SemanticSearchManager {
             .await
             .map_err(SemanticSearchManagerError::DatabaseError)
     }
+}
+
+fn repo_to_embedding_text(repo: &Repository) -> String {
+    let mut parts = Vec::new();
+    parts.push(format!("{}/{}", repo.owner, repo.name));
+    if let Some(desc) = &repo.description {
+        parts.push(desc.clone());
+    }
+    if let Some(readme) = &repo.readme_content {
+        let truncated = if readme.chars().count() > 2000 {
+            let truncated: String = readme.chars().take(2000).collect();
+            format!("{truncated}...")
+        } else {
+            readme.clone()
+        };
+        parts.push(truncated);
+    }
+    if !repo.topics.is_empty() {
+        parts.push(format!("Topics: {}", repo.topics.join(", ")));
+    }
+    parts.join("\n\n")
 }

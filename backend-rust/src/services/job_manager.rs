@@ -1,6 +1,7 @@
 // Background job management with tokio spawned tasks will go here
 
 use dashmap::DashMap;
+use rust_decimal::Decimal;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
 use tracing::{error, info, warn};
@@ -8,8 +9,24 @@ use tracing::{error, info, warn};
 use crate::db::Database;
 use crate::github::GitHubClient;
 use crate::services::{SemanticSearchManager, SemanticSearchManagerError};
-use crate::types::Repository;
 use crate::types::UserJob;
+use crate::types::repository::Repository;
+
+impl Repository {
+    pub fn from_octocrab(repo: octocrab::models::Repository) -> Self {
+        Repository {
+            id: Decimal::from(repo.id.0),
+            name: repo.name,
+            owner: repo.owner.map(|o| o.login).unwrap_or_default(),
+            description: repo.description,
+            readme_content: None,
+            topics: repo.topics.unwrap_or_default(),
+            homepage_url: repo.html_url.map(|u| u.to_string()).unwrap_or_default(),
+            created_at: repo.created_at,
+            last_updated: repo.updated_at,
+        }
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum JobError {
@@ -123,8 +140,8 @@ impl JobManager {
         // Fetch starred repositories via GitHub client
         let octo_repos = github_client.get_starred_repos().await?;
         let starred_repos: Vec<Repository> = octo_repos
-            .iter()
-            .map(Repository::from_octocrab_repository)
+            .into_iter()
+            .map(Repository::from_octocrab)
             .collect();
         info!(
             "Found {} starred repositories for user {}",

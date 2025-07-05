@@ -13,7 +13,7 @@ use crate::{
     extractors::AuthenticatedContext,
     http::{bad_request, internal_error, success, unauthorized},
     services::semantic_search_manager::SemanticSearchManager,
-    types::Repository,
+    types::repository::Repository,
 };
 
 /// Query parameters for semantic search

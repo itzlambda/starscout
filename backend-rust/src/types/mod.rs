@@ -7,7 +7,6 @@ pub mod user_job;
 
 // Re-export structs for easy importing
 pub use oauth_cache::{OAuthCacheError, OAuthCacheObject};
-pub use repository::{Repository, RepositoryOwner, RepositoryWithOwner};
 pub use user_job::{UserJob, job_status};
 
 // Common types that might be shared across modules

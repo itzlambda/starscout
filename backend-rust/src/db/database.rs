@@ -113,7 +113,6 @@ impl Database {
                     .get::<Option<Vec<String>>, _>("topics")
                     .unwrap_or_default(),
                 homepage_url: row.get("homepage_url"),
-                embedding: None,
                 created_at: row.get("created_at"),
                 last_updated: row.get("last_updated"),
             };
@@ -164,7 +163,6 @@ impl Database {
                     .get::<Option<Vec<String>>, _>("topics")
                     .unwrap_or_default(),
                 homepage_url: row.get("homepage_url"),
-                embedding: None,
                 created_at: row.get("created_at"),
                 last_updated: row.get("last_updated"),
             };
