@@ -7,6 +7,7 @@ import { Info, RefreshCw } from 'lucide-react';
 import { SearchInput } from './SearchInput';
 import { SearchResults } from './SearchResults';
 import { Repository } from '@/components/repository/RepositoryCard';
+import type { SearchResult } from '@/types/github';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -22,6 +23,10 @@ interface SearchInterfaceProps {
   onApiKeyChange: (value: string) => void;
 }
 
+// Tracks whether we've already attempted to initialize the user during this browser session.
+// Because it's a module-level variable, it survives component unmount/remount cycles.
+let initializationAttempted = false;
+
 export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, apiKey, onApiKeyChange }: SearchInterfaceProps) {
   const { data: session } = useSession();
   const [repositories, setRepositories] = useState<Repository[]>([]);
@@ -34,7 +39,7 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
   const checkUserExists = useCallback(async () => {
     if (!session?.accessToken) return false;
     try {
-      const response = await fetch(`${BACKEND_API_URL}/user-exists`, {
+      const response = await fetch(`${BACKEND_API_URL}/user/exists`, {
         headers: {
           'Authorization': `Bearer ${session.accessToken}`,
         },
@@ -43,7 +48,7 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
         throw new Error('Failed to check user existence');
       }
       const data = await response.json();
-      return data.user_exists;
+      return Boolean(data.user_exists);
     } catch (error) {
       console.error('Error checking user existence:', error);
       return false;
@@ -62,17 +67,21 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
       }
     };
 
-    if (session?.accessToken) {
+    // Run initialization only once per browser session to avoid infinite retry loops
+    if (session?.accessToken && !initializationAttempted) {
+      initializationAttempted = true;
       initializeUser();
     }
-  }, [session?.accessToken, onRefreshStars, checkUserExists, apiKey]);
+    // Intentionally exclude `onRefreshStars` from dependencies to keep the effect stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.accessToken, checkUserExists, apiKey]);
 
   const handleSearch = async (query: string) => {
     if (!octokit || !session?.accessToken) return;
 
     setIsLoading(true);
     try {
-      const endpoint = isGlobalSearch ? 'search-global' : 'search';
+      const endpoint = isGlobalSearch ? 'search_global' : 'search';
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -92,29 +101,32 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
       }
       const data = await response.json();
 
-      setRepositories(data.map((repo: {
-        id: number;
-        name: string;
-        full_name: string;
-        description: string | null;
-        url: string;
-        topics: string[];
-        owner: {
-          login: string;
-          avatar_url: string;
-        };
-      }) => ({
-        id: repo.id,
-        name: repo.name,
-        fullName: repo.full_name,
-        description: repo.description,
-        url: repo.url,
-        topics: repo.topics || [],
-        owner: {
-          login: repo.owner.login,
-          avatarUrl: repo.owner.avatar_url
-        }
-      })));
+      // Rust backend returns {results: [{repository, similarity_score}], ...},
+      // Fallback to legacy array for backward compatibility
+      const reposArray = Array.isArray(data) ? data : data.results ?? [];
+
+      setRepositories(reposArray.map((item: SearchResult | Repository) => {
+        const repo = 'repository' in item ? item.repository : item;
+        // Handle the backend API response structure
+        const ownerLogin = typeof repo.owner === 'string' ? repo.owner : repo.owner?.login || 'unknown';
+
+        return {
+          id: typeof repo.id === 'string' ? parseInt(repo.id, 10) : repo.id,
+          name: repo.name,
+          fullName: `${ownerLogin}/${repo.name}`,
+          description: repo.description,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          url: (repo as any).homepage_url || repo.url || `https://github.com/${ownerLogin}/${repo.name}`,
+          topics: repo.topics || [],
+          owner: {
+            login: ownerLogin,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            avatarUrl: typeof repo.owner === 'object' && repo.owner?.avatarUrl
+              ? repo.owner.avatarUrl
+              : `https://github.com/${ownerLogin}.png`,
+          },
+        } as Repository;
+      }));
     } catch (error) {
       console.error("Error searching repositories:", error);
     } finally {
