@@ -9,7 +9,7 @@ pub async fn user_exists_handler(
     let user_id = user.id;
     let exists = app_state
         .database
-        .user_exists(user_id.into())
+        .user_exists((user_id.0 as i64).into())
         .await
         .unwrap();
     success(json!({ "user_exists": exists }))

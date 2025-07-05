@@ -38,7 +38,7 @@ pub async fn generate_embeddings_handler(
     // Start background job using JobManager
     match app_state
         .job_manager
-        .start_job(user_id as i64, api_key, &github_client)
+        .start_job(user_id.0 as i64, api_key, &github_client)
         .await
     {
         Ok(job_id) => {

@@ -129,7 +129,7 @@ impl SemanticSearchManager {
             // Try to fetch README content
             match github_client.get_readme(&repo.owner, &repo.name).await {
                 Ok(readme_content) => {
-                    enriched_repo.readme_content = Some(readme_content);
+                    enriched_repo.readme_content = readme_content;
                     debug!("Fetched README for {}/{}", repo.owner, repo.name);
                 }
                 Err(e) => {

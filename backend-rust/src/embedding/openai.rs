@@ -189,7 +189,7 @@ mod tests {
     #[test]
     fn test_new_service() {
         let service = OpenAIEmbeddingService::new();
-        assert_eq!(service.model(), "text-embedding-ada-002");
+        assert_eq!(service.model(), "text-embedding-3-small");
     }
 
     #[test]

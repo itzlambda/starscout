@@ -84,7 +84,7 @@ pub async fn semantic_search_handler(
 
     // Perform semantic search on user's starred repositories
     match repo_manager
-        .semantic_search_starred(query, user.id.into(), top_k, api_key)
+        .semantic_search_starred(query, (user.id.0 as i64).into(), top_k, api_key)
         .await
     {
         Ok(results) => {

@@ -2,15 +2,15 @@ use axum::{extract::FromRequestParts, response::Response};
 use http::request::Parts;
 
 use crate::{
-    github::{GitHubClient, User},
+    github::{Author, GitHubClient},
     http::unauthorized,
 };
 // use crate::http::unauthorized;
 // use axum::{extract::FromRequestParts, http::request::Parts, response::Response};
 
-/// Extractor for authenticated user, automatically extracts User from request extensions
+/// Extractor for authenticated user, automatically extracts Author from request extensions
 #[derive(Debug, Clone)]
-pub struct AuthenticatedUser(pub User);
+pub struct AuthenticatedUser(pub Author);
 
 impl<S> FromRequestParts<S> for AuthenticatedUser
 where
@@ -21,7 +21,7 @@ where
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         parts
             .extensions
-            .get::<User>()
+            .get::<Author>()
             .map(|user| AuthenticatedUser(user.clone()))
             .ok_or_else(|| unauthorized("User not found in request extensions"))
     }
@@ -49,7 +49,7 @@ where
 /// Combined extractor for both user and GitHub client
 #[derive(Debug, Clone)]
 pub struct AuthenticatedContext {
-    pub user: User,
+    pub user: Author,
     pub github_client: GitHubClient,
 }
 
@@ -62,7 +62,7 @@ where
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         let user = parts
             .extensions
-            .get::<User>()
+            .get::<Author>()
             .cloned()
             .ok_or_else(|| unauthorized("User not found in request extensions"))?;
 

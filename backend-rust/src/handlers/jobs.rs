@@ -17,7 +17,7 @@ pub async fn job_status_handler(
 ) -> impl IntoResponse {
     tracing::debug!("Job status requested by user: {}", user.login);
 
-    let user_id = user.id as i64;
+    let user_id = user.id.0 as i64;
     let is_running = app_state.job_manager.is_job_running(user_id);
 
     // Get the latest job for this user
