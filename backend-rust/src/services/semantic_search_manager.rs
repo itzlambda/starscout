@@ -6,6 +6,13 @@ use sqlx::types::Decimal;
 use thiserror::Error;
 use tracing::{debug, error, info, warn};
 
+/// Scope for semantic search
+#[derive(Debug, Clone, Copy)]
+pub enum SearchScope {
+    Global,
+    Starred { user_id: Decimal },
+}
+
 #[derive(Error, Debug)]
 pub enum SemanticSearchManagerError {
     #[error("Database error: {0}")]
@@ -206,12 +213,13 @@ impl SemanticSearchManager {
         Ok(())
     }
 
-    /// Perform semantic search on repositories
+    /// Perform semantic search on repositories (global or starred)
     pub async fn semantic_search(
         &self,
         query: &str,
         top_k: usize,
         api_key: &str,
+        scope: SearchScope,
     ) -> Result<Vec<(Repository, f32)>, SemanticSearchManagerError> {
         if query.is_empty() {
             return Err(SemanticSearchManagerError::ValidationError(
@@ -223,70 +231,48 @@ impl SemanticSearchManager {
             return Ok(Vec::new());
         }
 
-        debug!(
-            "Performing semantic search for query: '{}', top_k: {}",
-            query, top_k
-        );
-
-        // Generate embedding for the query
-        let query_embedding = self.embedding_service.get_embedding(query, api_key).await?;
-
-        // Use Database method for semantic search
-        let results = self
-            .database
-            .semantic_search_repositories(&query_embedding, top_k)
-            .await?;
-
-        info!("Found {} results for semantic search query", results.len());
-        Ok(results)
-    }
-
-    /// Perform semantic search on user's starred repositories only
-    pub async fn semantic_search_starred(
-        &self,
-        query: &str,
-        user_id: Decimal,
-        top_k: usize,
-        api_key: &str,
-    ) -> Result<Vec<(Repository, f32)>, SemanticSearchManagerError> {
-        if query.is_empty() {
-            return Err(SemanticSearchManagerError::ValidationError(
-                "Query cannot be empty".to_string(),
-            ));
+        match scope {
+            SearchScope::Global => {
+                debug!(
+                    "Performing semantic search for query: '{}', top_k: {}",
+                    query, top_k
+                );
+                // Generate embedding for the query
+                let query_embedding = self.embedding_service.get_embedding(query, api_key).await?;
+                // Use Database method for semantic search
+                let results = self
+                    .database
+                    .semantic_search_repositories(&query_embedding, top_k)
+                    .await?;
+                info!("Found {} results for semantic search query", results.len());
+                Ok(results)
+            }
+            SearchScope::Starred { user_id } => {
+                debug!(
+                    "Performing semantic search on starred repos for user: {}, query: '{}', top_k: {}",
+                    user_id, query, top_k
+                );
+                // Get user's starred repository IDs to check if user has stars
+                let starred_repo_ids = self.get_user_starred_repo_ids_by_string(user_id).await?;
+                if starred_repo_ids.is_empty() {
+                    debug!("User {} has no starred repositories", user_id);
+                    return Ok(Vec::new());
+                }
+                // Generate embedding for the query
+                let query_embedding = self.embedding_service.get_embedding(query, api_key).await?;
+                // Use Database method for semantic search on starred repositories
+                let results = self
+                    .database
+                    .semantic_search_starred_repositories(&query_embedding, user_id, top_k)
+                    .await?;
+                info!(
+                    "Found {} results for starred repositories search for user {}",
+                    results.len(),
+                    user_id
+                );
+                Ok(results)
+            }
         }
-
-        if top_k == 0 {
-            return Ok(Vec::new());
-        }
-
-        debug!(
-            "Performing semantic search on starred repos for user: {}, query: '{}', top_k: {}",
-            user_id, query, top_k
-        );
-
-        // Get user's starred repository IDs to check if user has stars
-        let starred_repo_ids = self.get_user_starred_repo_ids_by_string(user_id).await?;
-
-        if starred_repo_ids.is_empty() {
-            debug!("User {} has no starred repositories", user_id);
-            return Ok(Vec::new());
-        }
-
-        // Generate embedding for the query
-        let query_embedding = self.embedding_service.get_embedding(query, api_key).await?;
-
-        // Use Database method for semantic search on starred repositories
-        let results = self
-            .database
-            .semantic_search_starred_repositories(&query_embedding, user_id, top_k)
-            .await?;
-
-        info!(
-            "Found {} results for starred repositories search for user {}",
-            results.len(),
-            user_id
-        );
-        Ok(results)
     }
 
     /// Get repository count for statistics
