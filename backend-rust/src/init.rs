@@ -41,6 +41,12 @@ pub async fn init_services(config: &AppConfig) -> Result<AppState> {
     let repo_manager = SemanticSearchManager::new(embedding_service.clone(), database.clone());
     let job_manager = JobManager::new(repo_manager, database.clone());
 
+    // Initialize JobManager and clean up any stale jobs
+    job_manager
+        .initialize()
+        .await
+        .with_context(|| "Failed to initialize JobManager and clean up stale jobs")?;
+
     tracing::info!("OpenAI embedding service initialized successfully");
 
     Ok(AppState {

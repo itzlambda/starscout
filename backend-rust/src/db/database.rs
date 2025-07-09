@@ -77,6 +77,28 @@ impl Database {
         Ok(row.get("count"))
     }
 
+    /// Insert a repository without README into the tracking table
+    pub async fn insert_repo_without_readme(
+        &self,
+        repo_id: Decimal,
+        name: &str,
+        owner: &str,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"
+            INSERT INTO repos_without_readme (id, name, owner)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (id) DO NOTHING
+            "#,
+        )
+        .bind(repo_id)
+        .bind(name)
+        .bind(owner)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
     /// Perform semantic search on all repositories
     pub async fn semantic_search_repositories(
         &self,
@@ -371,6 +393,58 @@ impl Database {
             "#,
         )
         .bind(job_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Get all incomplete jobs (jobs that are neither completed nor failed)
+    /// Used for cleanup on server startup
+    pub async fn get_incomplete_jobs(&self) -> Result<Vec<crate::types::UserJob>, sqlx::Error> {
+        let jobs = sqlx::query_as::<_, crate::types::UserJob>(
+            r#"
+            SELECT id, user_id, status, total_repos, processed_repos, failed_repos, 
+                   created_at, updated_at, completed_at
+            FROM user_jobs
+            WHERE status NOT IN ('completed', 'failed') AND completed_at IS NULL
+            ORDER BY created_at DESC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(jobs)
+    }
+
+    /// Check if a user has any incomplete job
+    pub async fn has_incomplete_job(&self, user_id: Decimal) -> Result<bool, sqlx::Error> {
+        let row = sqlx::query(
+            r#"
+            SELECT EXISTS (
+                SELECT 1 FROM user_jobs 
+                WHERE user_id = $1 AND status NOT IN ('completed', 'failed') AND completed_at IS NULL
+            )
+            "#,
+        )
+        .bind(user_id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.get::<bool, _>(0))
+    }
+
+    /// Mark multiple jobs as failed (used for cleanup)
+    pub async fn fail_jobs(&self, job_ids: &[i32]) -> Result<(), sqlx::Error> {
+        if job_ids.is_empty() {
+            return Ok(());
+        }
+
+        sqlx::query(
+            r#"
+            UPDATE user_jobs 
+            SET status = 'failed', completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ANY($1)
+            "#,
+        )
+        .bind(job_ids)
         .execute(&self.pool)
         .await?;
         Ok(())

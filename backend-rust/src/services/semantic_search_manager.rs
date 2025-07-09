@@ -63,6 +63,7 @@ impl SemanticSearchManager {
         api_key: &str,
         github_client: &GitHubClient,
         starred_repos: Vec<Repository>,
+        job_id: i32, // Required job_id for progress tracking
     ) -> Result<(), SemanticSearchManagerError> {
         info!("Starting embedding generation for user: {}", user_id);
 
@@ -82,13 +83,30 @@ impl SemanticSearchManager {
         const BATCH_SIZE: usize = 50;
         let mut processed_count = 0;
         let mut failed_count = 0;
+        let total_repos = starred_repos.len();
 
         if repos_to_process.is_empty() {
             info!(
                 "All repositories already have embeddings for user {}",
                 user_id
             );
+            // Update progress to show all repos as processed
+            if let Err(e) = self
+                .database
+                .update_job_progress(job_id, total_repos as i32, total_repos as i32, 0)
+                .await
+            {
+                warn!(
+                    "Failed to update job progress for completed job {}: {}",
+                    job_id, e
+                );
+            }
         } else {
+            info!(
+                "Processing {} new repositories that need embeddings",
+                repos_to_process.len()
+            );
+
             for batch in repos_to_process.chunks(BATCH_SIZE) {
                 match self
                     .process_repository_batch(batch, user_id, api_key, github_client)
@@ -97,10 +115,50 @@ impl SemanticSearchManager {
                     Ok(batch_processed) => {
                         processed_count += batch_processed;
                         info!("Processed batch: {} repositories", batch_processed);
+
+                        // Update job progress after each batch
+                        // Calculate total processed (including already existing ones)
+                        let already_existing = total_repos - repos_to_process.len();
+                        let total_processed = already_existing + processed_count;
+
+                        if let Err(e) = self
+                            .database
+                            .update_job_progress(
+                                job_id,
+                                total_repos as i32,
+                                total_processed as i32,
+                                failed_count as i32,
+                            )
+                            .await
+                        {
+                            warn!("Failed to update job progress after batch: {}", e);
+                        } else {
+                            info!(
+                                "Updated job {} progress: {}/{} processed",
+                                job_id, total_processed, total_repos
+                            );
+                        }
                     }
                     Err(e) => {
                         failed_count += batch.len();
                         error!("Failed to process batch: {:?}", e);
+
+                        // Update job progress with failures
+                        let already_existing = total_repos - repos_to_process.len();
+                        let total_processed = already_existing + processed_count;
+
+                        if let Err(e) = self
+                            .database
+                            .update_job_progress(
+                                job_id,
+                                total_repos as i32,
+                                total_processed as i32,
+                                failed_count as i32,
+                            )
+                            .await
+                        {
+                            warn!("Failed to update job progress after failed batch: {}", e);
+                        }
                     }
                 }
             }
@@ -151,7 +209,7 @@ impl SemanticSearchManager {
                         }
                         Err(_) => {
                             warn!(
-                                "Failed to fetch README for {}/{}",
+                                "No README found for {}/{}",
                                 enriched_repo.owner, enriched_repo.name
                             );
                             // Continue without README
@@ -167,7 +225,31 @@ impl SemanticSearchManager {
         let mut processed_repos = Vec::with_capacity(repos.len());
         for task in tasks {
             match task.await {
-                Ok(enriched_repo) => processed_repos.push(enriched_repo),
+                Ok(enriched_repo) => match enriched_repo.readme_content {
+                    Some(_) => processed_repos.push(enriched_repo),
+                    None => {
+                        // Store repository without README in tracking table
+                        if let Err(e) = self
+                            .database
+                            .insert_repo_without_readme(
+                                enriched_repo.id,
+                                &enriched_repo.name,
+                                &enriched_repo.owner,
+                            )
+                            .await
+                        {
+                            warn!(
+                                "Failed to insert repo without README {}/{}: {}",
+                                enriched_repo.owner, enriched_repo.name, e
+                            );
+                        } else {
+                            debug!(
+                                "Stored {}/{} in repos_without_readme table",
+                                enriched_repo.owner, enriched_repo.name
+                            );
+                        }
+                    }
+                },
                 Err(e) => {
                     error!("README fetch task failed: {:?}", e);
                     // Continue with partial results - the task panic shouldn't stop the entire batch

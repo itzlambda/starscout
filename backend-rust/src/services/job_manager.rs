@@ -63,6 +63,36 @@ impl JobManager {
         }
     }
 
+    /// Initialize the JobManager by cleaning up any stale jobs from previous server runs
+    /// This should be called once during server startup
+    pub async fn initialize(&self) -> Result<(), JobError> {
+        info!("Initializing JobManager and cleaning up stale jobs...");
+
+        // Find all incomplete jobs (jobs that were running when server shut down)
+        let incomplete_jobs = self.database.get_incomplete_jobs().await?;
+
+        if !incomplete_jobs.is_empty() {
+            let job_ids: Vec<i32> = incomplete_jobs.iter().map(|job| job.id.unwrap()).collect();
+            info!(
+                "Found {} stale jobs, marking them as failed: {:?}",
+                incomplete_jobs.len(),
+                job_ids
+            );
+
+            // Mark all stale jobs as failed since they were interrupted
+            self.database.fail_jobs(&job_ids).await?;
+
+            info!(
+                "Successfully cleaned up {} stale jobs",
+                incomplete_jobs.len()
+            );
+        } else {
+            info!("No stale jobs found during initialization");
+        }
+
+        Ok(())
+    }
+
     /// Start a background job to process a user's starred repositories
     /// Returns the job ID if successful, or an error if a job is already running for this user
     pub async fn start_job(
@@ -71,7 +101,7 @@ impl JobManager {
         api_key: &str,
         github_client: &GitHubClient,
     ) -> Result<i32, JobError> {
-        // Check if job is already running
+        // Check if job is already running in memory
         if self.active_jobs.contains_key(&user_id) {
             return Err(JobError::JobAlreadyRunning { user_id });
         }
@@ -158,25 +188,23 @@ impl JobManager {
             .await?;
 
         // Generate and store embeddings using RepoManager
+        // Progress is now updated incrementally inside generate_and_store_embeddings
         match repo_manager
             .generate_and_store_embeddings(
                 user_id.try_into().unwrap(),
                 &api_key,
                 github_client,
                 starred_repos.clone(),
+                job_id, // Pass job_id for progress tracking
             )
             .await
         {
             Ok(_) => {
-                // Update job progress - mark all as processed successfully
-                database
-                    .update_job_progress(
-                        job_id,
-                        starred_repos.len() as i32,
-                        starred_repos.len() as i32,
-                        0,
-                    )
-                    .await?;
+                // No need to update progress here as it's done incrementally
+                info!(
+                    "Successfully completed embedding generation for user {}",
+                    user_id
+                );
             }
             Err(e) => {
                 // Mark all as failed and propagate error
