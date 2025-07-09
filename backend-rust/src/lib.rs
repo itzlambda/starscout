@@ -19,6 +19,7 @@ use axum::middleware::from_fn;
 use axum::{Router, response::Json, routing::get};
 use serde_json::{Value, json};
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tracing::instrument;
 
 use crate::handlers::jobs::job_status_handler;
 use crate::handlers::search::{semantic_search_global_handler, semantic_search_handler};
@@ -39,15 +40,16 @@ pub fn build_router(state: AppState) -> Router {
 
     Router::new()
         .route("/", get(health_check))
-        .route("/health", get(health_check))
+        // .route("/health", get(health_check))
         .route("/settings", get(get_settings_handler))
         .merge(protected_routes)
-        .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
+        .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
 
 /// Simple health check endpoint (not protected)
+#[instrument]
 pub async fn health_check() -> Json<Value> {
     Json(json!({
         "status": "healthy",

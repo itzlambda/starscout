@@ -2,6 +2,7 @@
 
 use axum::{extract::State, http::HeaderMap, response::Response};
 use serde_json::json;
+use tracing::instrument;
 
 use crate::{
     app_state::AppState,
@@ -9,6 +10,7 @@ use crate::{
     http::{internal_error, success, unauthorized},
 };
 
+#[instrument(skip_all, fields(user = user.login))]
 pub async fn generate_embeddings_handler(
     State(app_state): State<AppState>,
     AuthenticatedContext {

@@ -2,6 +2,7 @@
 
 use axum::{extract::State, response::IntoResponse};
 use serde_json::json;
+use tracing::instrument;
 
 use crate::{
     app_state::AppState,
@@ -11,6 +12,7 @@ use crate::{
 
 /// GET /jobs/status - Get current job processing status for the authenticated user
 /// Returns the latest job information, whether a job is currently running, and overall status
+#[instrument(skip_all, fields(user = user.login))]
 pub async fn job_status_handler(
     State(app_state): State<AppState>,
     AuthenticatedUser(user): AuthenticatedUser,

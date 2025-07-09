@@ -7,6 +7,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tracing::instrument;
 
 use crate::{
     app_state::AppState,
@@ -130,6 +131,7 @@ async fn handle_semantic_search(
 }
 
 /// GET /search?query=...&top_k=... - Perform semantic search on repositories
+#[instrument(skip_all, fields(user = user.login))]
 pub async fn semantic_search_handler(
     State(app_state): State<AppState>,
     Query(params): Query<SearchQuery>,
@@ -149,6 +151,7 @@ pub async fn semantic_search_handler(
 }
 
 /// GET /search/global?query=...&top_k=... - Perform global semantic search across all repositories
+#[instrument(skip_all, fields(user = user.login))]
 pub async fn semantic_search_global_handler(
     State(app_state): State<AppState>,
     Query(params): Query<SearchQuery>,
