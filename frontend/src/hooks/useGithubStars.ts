@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { UserJob } from '@/types/github';
+import { UserJob, RateLimitError } from '@/types/github';
 import { useSession } from 'next-auth/react';
 import type { Session } from 'next-auth';
+import { parseRateLimitHeaders } from '@/lib/utils';
 
 const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL;
 
@@ -12,6 +13,7 @@ export function useGithubStars() {
   const [processingStars, setProcessingStars] = useState(false);
   const [jobStatus, setJobStatus] = useState<UserJob | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [rateLimitError, setRateLimitError] = useState<RateLimitError | null>(null);
 
   // Checks if the authenticated user exists in the backend
   const checkUserExists = useCallback(async (): Promise<boolean> => {
@@ -104,6 +106,7 @@ export function useGithubStars() {
     try {
       setProcessingStars(true);
       setIsRefreshing(forceRefresh);
+      setRateLimitError(null);
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -119,6 +122,22 @@ export function useGithubStars() {
         method: 'GET',
         headers,
       });
+
+      // Parse rate limit headers regardless of response status
+      const rateLimitInfo = parseRateLimitHeaders(response);
+
+      if (rateLimitInfo.isRateLimited) {
+        setRateLimitError({
+          isRateLimited: true,
+          retryAfter: rateLimitInfo.retryAfter,
+          limit: rateLimitInfo.limit,
+          remaining: rateLimitInfo.remaining,
+          message: "You've exceeded the star processing rate limit. Please wait before trying again.",
+        });
+        setProcessingStars(false);
+        setIsRefreshing(false);
+        return;
+      }
 
       if (!response.ok) {
         throw new Error('Failed to process starred repositories');
@@ -200,6 +219,7 @@ export function useGithubStars() {
     processingStars,
     jobStatus,
     isRefreshing,
+    rateLimitError,
     refreshStars,
     startProcessing
   };

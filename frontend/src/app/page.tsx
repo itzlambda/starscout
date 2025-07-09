@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react";
 import { useGithubStars } from "@/hooks/useGithubStars";
 import { ProcessingStatus } from "@/components/github/ProcessingStatus";
 import { SearchInterface } from "@/components/search/SearchInterface";
+import { RateLimitError } from "@/components/search/RateLimitError";
 import { LandingContent } from "@/components/landing/LandingContent";
 import { OnboardingContent } from "@/components/onboarding/OnboardingContent";
 import { Navbar } from "@/components/layout/Navbar";
@@ -20,12 +21,12 @@ const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL;
 export default function Home() {
   const { data: session }: { data: Session | null } = useSession();
   const { isBackendHealthy } = useBackendHealth();
-  const { processingStars, jobStatus, isRefreshing, refreshStars, startProcessing } = useGithubStars();
+  const { processingStars, jobStatus, isRefreshing, rateLimitError, refreshStars, startProcessing } = useGithubStars();
   const [totalStars, setTotalStars] = useState<number>(0);
   const [hasStartedProcessing, setHasStartedProcessing] = useState(false);
   const [currentView, setCurrentView] = useState<'home' | 'search'>(hasStartedProcessing ? 'search' : 'home');
   const [isLoadingStars, setIsLoadingStars] = useState(true);
-  const [apiKeyThreshold, setApiKeyThreshold] = useState(0);
+  const [apiKeyThreshold, setApiKeyThreshold] = useState(5000); // Default to prevent search being disabled initially
   const [apiKey, setApiKey] = useState('');
 
   useEffect(() => {
@@ -148,6 +149,15 @@ export default function Home() {
             {currentView === 'home' ? (
               <OnboardingContent
                 onStartProcessing={handleStartProcessing}
+                apiKeyThreshold={apiKeyThreshold}
+              />
+            ) : rateLimitError ? (
+              <RateLimitError
+                error={rateLimitError}
+                onApiKeyClick={() => {
+                  // Navigate to search view where API key input is available
+                  setCurrentView('search');
+                }}
               />
             ) : processingStars ? (
               <ProcessingStatus jobStatus={jobStatus} isRefreshing={isRefreshing} />

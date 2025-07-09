@@ -44,4 +44,19 @@ export interface SearchResponse {
   query: string;
   total_count: number;
   results: SearchResult[];
+}
+
+export interface RateLimitHeaders {
+  'x-ratelimit-after'?: string;
+  'retry-after'?: string;
+  'x-ratelimit-limit'?: string;
+  'x-ratelimit-remaining'?: string;
+}
+
+export interface RateLimitError {
+  isRateLimited: boolean;
+  retryAfter?: number;
+  limit?: number;
+  remaining?: number;
+  message: string;
 } 

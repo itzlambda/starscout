@@ -1,17 +1,19 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { Octokit } from 'octokit';
 import { Info, RefreshCw } from 'lucide-react';
 import { SearchInput } from './SearchInput';
 import { SearchResults } from './SearchResults';
+import { RateLimitError } from './RateLimitError';
 import { Repository } from '@/components/repository/RepositoryCard';
-import type { SearchResult } from '@/types/github';
+import type { SearchResult, RateLimitError as RateLimitErrorType } from '@/types/github';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ApiKeyInput } from './ApiKeyInput';
+import { ApiKeyInput, ApiKeyInputRef } from './ApiKeyInput';
+import { parseRateLimitHeaders } from '@/lib/utils';
 
 const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL;
 
@@ -32,6 +34,8 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isGlobalSearch, setIsGlobalSearch] = useState(false);
+  const [rateLimitError, setRateLimitError] = useState<RateLimitErrorType | null>(null);
+  const apiKeyInputRef = useRef<ApiKeyInputRef>(null);
   const [octokit] = useState<Octokit | null>(() =>
     session?.accessToken ? new Octokit({ auth: session.accessToken }) : null
   );
@@ -80,6 +84,8 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
     if (!octokit || !session?.accessToken) return;
 
     setIsLoading(true);
+    setRateLimitError(null);
+
     try {
       const endpoint = isGlobalSearch ? 'search_global' : 'search';
       const headers: Record<string, string> = {
@@ -96,9 +102,26 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
         method: 'GET',
         headers,
       });
+
+      // Parse rate limit headers regardless of response status
+      const rateLimitInfo = parseRateLimitHeaders(response);
+
+      if (rateLimitInfo.isRateLimited) {
+        setRateLimitError({
+          isRateLimited: true,
+          retryAfter: rateLimitInfo.retryAfter,
+          limit: rateLimitInfo.limit,
+          remaining: rateLimitInfo.remaining,
+          message: "You've exceeded the search rate limit. Please wait before trying again.",
+        });
+        setRepositories([]); // Clear previous results
+        return;
+      }
+
       if (!response.ok) {
         throw new Error('Failed to fetch search results');
       }
+
       const data = await response.json();
 
       // Rust backend returns {results: [{repository, similarity_score}], ...},
@@ -136,6 +159,13 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
 
   const requiresApiKey = totalStars > apiKeyThreshold;
 
+  const handleApiKeyClick = () => {
+    // Focus and highlight the API key input
+    if (apiKeyInputRef.current) {
+      apiKeyInputRef.current.focusAndHighlight();
+    }
+  };
+
   return (
     <div className="flex flex-col gap-8">
       <>
@@ -159,6 +189,7 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
           </div>
 
           <ApiKeyInput
+            ref={apiKeyInputRef}
             apiKey={apiKey}
             onApiKeyChange={onApiKeyChange}
             apiKeyThreshold={apiKeyThreshold}
@@ -196,11 +227,18 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
           </div>
         </div>
 
-        <SearchResults
-          repositories={repositories}
-          isLoading={isLoading}
-          emptyMessage="Enter a search query to find repositories"
-        />
+        {rateLimitError ? (
+          <RateLimitError
+            error={rateLimitError}
+            onApiKeyClick={handleApiKeyClick}
+          />
+        ) : (
+          <SearchResults
+            repositories={repositories}
+            isLoading={isLoading}
+            emptyMessage="Enter a search query to find repositories"
+          />
+        )}
       </>
     </div>
   );
