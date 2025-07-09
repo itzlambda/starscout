@@ -127,28 +127,52 @@ impl SemanticSearchManager {
         api_key: &str,
         github_client: &GitHubClient,
     ) -> Result<usize, SemanticSearchManagerError> {
-        let mut processed_repos = Vec::new();
+        // Spawn tasks for fetching README content in parallel
+        let tasks: Vec<_> = repos
+            .iter()
+            .map(|repo| {
+                let repo = repo.clone();
+                let github_client = github_client.clone();
 
-        // Fetch README content for each repository
-        for repo in repos {
-            let mut enriched_repo = repo.clone();
+                tokio::spawn(async move {
+                    let mut enriched_repo = repo;
 
-            // Try to fetch README content
-            match github_client.get_readme(&repo.owner, &repo.name).await {
-                Ok(readme_content) => {
-                    enriched_repo.readme_content = readme_content;
-                    debug!("Fetched README for {}/{}", repo.owner, repo.name);
-                }
+                    // Try to fetch README content
+                    match github_client
+                        .get_readme(&enriched_repo.owner, &enriched_repo.name)
+                        .await
+                    {
+                        Ok(readme_content) => {
+                            enriched_repo.readme_content = readme_content;
+                            debug!(
+                                "Fetched README for {}/{}",
+                                enriched_repo.owner, enriched_repo.name
+                            );
+                        }
+                        Err(_) => {
+                            warn!(
+                                "Failed to fetch README for {}/{}",
+                                enriched_repo.owner, enriched_repo.name
+                            );
+                            // Continue without README
+                        }
+                    }
+
+                    enriched_repo
+                })
+            })
+            .collect();
+
+        // Wait for all tasks to complete and collect results
+        let mut processed_repos = Vec::with_capacity(repos.len());
+        for task in tasks {
+            match task.await {
+                Ok(enriched_repo) => processed_repos.push(enriched_repo),
                 Err(e) => {
-                    warn!(
-                        "Failed to fetch README for {}/{}: {:?}",
-                        repo.owner, repo.name, e
-                    );
-                    // Continue without README
+                    error!("README fetch task failed: {:?}", e);
+                    // Continue with partial results - the task panic shouldn't stop the entire batch
                 }
             }
-
-            processed_repos.push(enriched_repo);
         }
 
         // Generate embeddings for all repositories in this batch

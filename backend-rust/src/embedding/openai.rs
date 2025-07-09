@@ -83,15 +83,7 @@ impl OpenAIEmbeddingService {
 
         debug!("Getting embeddings for {} texts", texts.len());
 
-        // OpenAI has a limit of ~8192 tokens per request, so we batch requests
-        // Each text could be up to ~2000 tokens, so we batch 4 at a time to be safe
-        const BATCH_SIZE: usize = 4;
-        let mut all_embeddings = Vec::new();
-
-        for batch in texts.chunks(BATCH_SIZE) {
-            let batch_embeddings = self.get_embeddings_batch(batch.to_vec(), api_key).await?;
-            all_embeddings.extend(batch_embeddings);
-        }
+        let all_embeddings = self.get_embeddings_batch(texts, api_key).await?;
 
         info!("Successfully generated {} embeddings", all_embeddings.len());
         Ok(all_embeddings)

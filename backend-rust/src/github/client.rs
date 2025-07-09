@@ -71,10 +71,11 @@ impl GitHubClient {
             // No README found
             return Ok(None);
         };
+        let cleaned = encoded_content.replace("\n", "");
 
         let decoded_content =
             BASE64_STANDARD
-                .decode(&encoded_content)
+                .decode(&cleaned)
                 .map_err(|err| OctocrabError::Serde {
                     source: serde_json::Error::io(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,

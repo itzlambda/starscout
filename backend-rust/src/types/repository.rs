@@ -8,6 +8,7 @@ pub struct Repository {
     pub name: String,
     pub owner: String,
     pub description: Option<String>,
+    // is populated manually
     pub readme_content: Option<String>,
     pub topics: Vec<String>,
     pub homepage_url: String,
