@@ -3,6 +3,7 @@
 use base64::prelude::*;
 use octocrab::models::{Author, Repository};
 use octocrab::{Error as OctocrabError, Octocrab};
+use url::Url;
 
 /// A thin wrapper around the octocrab crate to expose only the project-specific
 /// GitHub operations we need (fetching the authenticated user, paginated starred
@@ -26,33 +27,57 @@ impl GitHubClient {
         Ok(response)
     }
 
-    // TODO: since we know number of stars a user and per_page count is defined by us
-    // we can use that to fetch all the pages in parallel
+    pub async fn get_starred_repos_count(&self) -> Result<usize, OctocrabError> {
+        let response = self
+            .inner
+            .current()
+            .list_repos_starred_by_authenticated_user()
+            .per_page(1)
+            .send()
+            .await?;
+
+        let last_page = response.last.unwrap();
+        let star_count = get_page_from_url(&last_page.to_string()).unwrap();
+        Ok(star_count.try_into().unwrap())
+    }
+
     /// Get all starred repositories for the authenticated user
-    /// This method handles pagination automatically to collect all starred repos
-    pub async fn get_starred_repos(&self) -> Result<Vec<Repository>, OctocrabError> {
+    /// This method fetches the first page to get total count, then fetches all remaining pages in parallel
+    pub async fn get_starred_repos(
+        &self,
+        star_count: usize,
+    ) -> Result<Vec<Repository>, OctocrabError> {
+        let per_page = 100u8;
+
+        let pages = (star_count as f64 / per_page as f64).ceil() as u8;
+        let mut handles = Vec::new();
+
+        // Spawn a task for each page
+        for page in 1..=pages {
+            let client = self.inner.clone();
+            let handle = tokio::spawn(async move {
+                client
+                    .current()
+                    .list_repos_starred_by_authenticated_user()
+                    .per_page(per_page)
+                    .page(page)
+                    .send()
+                    .await
+            });
+            handles.push(handle);
+        }
+
+        // Collect results from all tasks
         let mut all_repos = Vec::new();
-        let per_page = 100;
-        let mut page = 1u8;
+        for handle in handles {
+            let page_result = handle.await.map_err(|e| OctocrabError::Serde {
+                source: serde_json::Error::io(std::io::Error::other(format!(
+                    "Task join error: {e}"
+                ))),
+                backtrace: std::backtrace::Backtrace::capture(),
+            })??;
 
-        loop {
-            let repos = self
-                .inner
-                .current()
-                .list_repos_starred_by_authenticated_user()
-                .per_page(per_page)
-                .page(page)
-                .send()
-                .await?;
-
-            let is_last_page = repos.items.len() < per_page.into();
-            all_repos.extend(repos.items);
-
-            if is_last_page {
-                break;
-            }
-
-            page += 1;
+            all_repos.extend(page_result.items);
         }
 
         Ok(all_repos)
@@ -94,4 +119,18 @@ impl GitHubClient {
 
         Ok(Some(content))
     }
+}
+
+/// Parses a URL and extracts the 'page' query parameter.
+pub fn get_page_from_url(url_str: &str) -> Option<u32> {
+    Url::parse(url_str)
+        .ok()?
+        .query_pairs()
+        .find_map(|(key, value)| {
+            if key == "page" {
+                value.parse::<u32>().ok()
+            } else {
+                None
+            }
+        })
 }

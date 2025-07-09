@@ -100,6 +100,7 @@ impl JobManager {
         user_id: i64,
         api_key: &str,
         github_client: &GitHubClient,
+        starred_repos_count: usize,
     ) -> Result<i32, JobError> {
         // Check if job is already running in memory
         if self.active_jobs.contains_key(&user_id) {
@@ -129,6 +130,7 @@ impl JobManager {
                 &github_client,
                 database,
                 api_key,
+                starred_repos_count,
             )
             .await;
 
@@ -159,6 +161,7 @@ impl JobManager {
         github_client: &GitHubClient,
         database: Database,
         api_key: String,
+        starred_repos_count: usize,
     ) -> Result<(), JobError> {
         info!("Processing starred repositories for user: {}", user_id);
 
@@ -168,7 +171,7 @@ impl JobManager {
             .await?;
 
         // Fetch starred repositories via GitHub client
-        let octo_repos = github_client.get_starred_repos().await?;
+        let octo_repos = github_client.get_starred_repos(starred_repos_count).await?;
         let starred_repos: Vec<Repository> = octo_repos
             .into_iter()
             .map(Repository::from_octocrab)

@@ -67,7 +67,7 @@ impl SemanticSearchManager {
     ) -> Result<(), SemanticSearchManagerError> {
         info!("Starting embedding generation for user: {}", user_id);
 
-        info!("Received {} starred repositories", starred_repos.len());
+        debug!("Received {} starred repositories", starred_repos.len());
 
         if starred_repos.is_empty() {
             info!("No starred repositories found for user {}", user_id);

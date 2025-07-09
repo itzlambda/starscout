@@ -26,11 +26,11 @@ pub async fn generate_embeddings_handler(
         .map(str::trim);
 
     // Get starred repositories count to enforce API key requirement
-    let starred_repos_count = match github_client.get_starred_repos().await {
-        Ok(repos) => repos.len(),
+    let starred_repos_count = match github_client.get_starred_repos_count().await {
+        Ok(count) => count,
         Err(e) => {
             tracing::error!(
-                "Failed to fetch starred repositories for user {}: {:?}",
+                "Failed to fetch starred repositories count for user {}: {:?}",
                 user.login,
                 e
             );
@@ -65,7 +65,12 @@ pub async fn generate_embeddings_handler(
     // Start background job using JobManager
     match app_state
         .job_manager
-        .start_job(user_id.0 as i64, api_key, &github_client)
+        .start_job(
+            user_id.0 as i64,
+            api_key,
+            &github_client,
+            starred_repos_count,
+        )
         .await
     {
         Ok(job_id) => {
