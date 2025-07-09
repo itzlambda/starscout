@@ -12,7 +12,7 @@ use tracing::instrument;
 use crate::{
     app_state::AppState,
     extractors::AuthenticatedContext,
-    http::{bad_request, internal_error, success, unauthorized},
+    http::{bad_request, internal_error, success},
     services::semantic_search_manager::{SearchScope, SemanticSearchManager},
     types::repository::Repository,
 };
@@ -50,13 +50,14 @@ async fn handle_semantic_search(
     scope: SearchScope,
 ) -> Response {
     // Enforce presence of Api_key header
+    // TODO?: handle different cases
     let api_key = match headers
         .get("Api_key")
         .and_then(|h| h.to_str().ok())
         .map(str::trim)
     {
-        Some(key) if !key.is_empty() => key,
-        _ => return unauthorized("API key required"),
+        Some(key) => key,
+        _ => &app_state.config.ai_api_key,
     };
 
     // Validate query parameters

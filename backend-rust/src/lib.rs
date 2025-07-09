@@ -13,11 +13,14 @@ pub mod middleware;
 pub mod services;
 pub mod types;
 
+use std::sync::Arc;
+
 // Re-export AppState for convenience
 pub use app_state::AppState;
 use axum::middleware::from_fn;
 use axum::{Router, response::Json, routing::get};
 use serde_json::{Value, json};
+use tower_governor::{GovernorLayer, governor::GovernorConfigBuilder};
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::instrument;
 
@@ -26,16 +29,37 @@ use crate::handlers::search::{semantic_search_global_handler, semantic_search_ha
 use crate::handlers::stars::generate_embeddings_handler;
 use crate::handlers::{get_settings_handler, user_exists_handler};
 use crate::middleware::auth;
+use crate::middleware::user_key_extractor::UserToken;
 
 pub fn build_router(state: AppState) -> Router {
-    // Build protected routes that require authentication
-    let protected_routes = Router::new()
-        // .route("/user", get(get_user_handler))
-        .route("/user/exists", get(user_exists_handler))
-        .route("/jobs/status", get(job_status_handler))
+    let governer_conf = Arc::new(
+        GovernorConfigBuilder::default()
+            .use_headers()
+            .key_extractor(UserToken)
+            .per_second(60) // 6 seconds between requests = 10 per minute
+            .burst_size(5)
+            .finish()
+            .unwrap(),
+    );
+
+    // Build search routes with rate limiting
+    let rate_limited_routes = Router::new()
         .route("/search", get(semantic_search_handler))
         .route("/search_global", get(semantic_search_global_handler))
         .route("/user/process_star", get(generate_embeddings_handler))
+        .layer(GovernorLayer {
+            config: Arc::clone(&governer_conf),
+        });
+
+    // Build other protected routes (no specific rate limiting)
+    let other_protected_routes = Router::new()
+        .route("/user/exists", get(user_exists_handler))
+        .route("/jobs/status", get(job_status_handler));
+
+    // Combine all protected routes and add auth middleware
+    let protected_routes = Router::new()
+        .merge(rate_limited_routes)
+        .merge(other_protected_routes)
         .layer(from_fn(auth::auth_middleware));
 
     Router::new()
