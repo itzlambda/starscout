@@ -307,22 +307,36 @@ impl SemanticSearchManager {
 }
 
 fn repo_to_embedding_text(repo: &Repository) -> String {
-    let mut parts = Vec::new();
-    parts.push(format!("{}/{}", repo.owner, repo.name));
-    if let Some(desc) = &repo.description {
-        parts.push(desc.clone());
-    }
-    if let Some(readme) = &repo.readme_content {
-        let truncated = if readme.chars().count() > 2000 {
+    let repo_name = format!("{}/{}", repo.owner, repo.name);
+    let description = repo.description.as_deref().unwrap_or("None");
+    let topics = if repo.topics.is_empty() {
+        "None".to_string()
+    } else {
+        repo.topics.join(", ")
+    };
+    let owner = &repo.owner;
+
+    let truncated_readme = if let Some(readme) = &repo.readme_content {
+        if readme.chars().count() > 2000 {
             let truncated: String = readme.chars().take(2000).collect();
             format!("{truncated}...")
         } else {
             readme.clone()
-        };
-        parts.push(truncated);
-    }
-    if !repo.topics.is_empty() {
-        parts.push(format!("Topics: {}", repo.topics.join(", ")));
-    }
-    parts.join("\n\n")
+        }
+    } else {
+        "None".to_string()
+    };
+
+    format!(
+        r#"
+# Key Information
+Repository name: {repo_name}
+Description: {description}
+Topics: {topics}
+Owner: {owner}
+
+# README Content
+{truncated_readme}
+"#,
+    )
 }
