@@ -6,9 +6,10 @@ import { Star, Search } from 'lucide-react';
 
 interface OnboardingContentProps {
   onStartProcessing: (apiKey?: string) => void;
+  apiKeyThreshold: number;
 }
 
-export function OnboardingContent({ onStartProcessing }: OnboardingContentProps) {
+export function OnboardingContent({ onStartProcessing, apiKeyThreshold }: OnboardingContentProps) {
   const handleStart = () => {
     onStartProcessing();
   };
@@ -168,7 +169,7 @@ export function OnboardingContent({ onStartProcessing }: OnboardingContentProps)
                 <div>
                   <h3 className="font-medium">API Key Requirement</h3>
                   <p className="text-sm text-muted-foreground">
-                    To prevent abuse, users with more than 5,000 GitHub stars will need to provide their own OpenAI API key.
+                    To prevent abuse, users with more than {apiKeyThreshold.toLocaleString()} GitHub stars will need to provide their own OpenAI API key.
                   </p>
                 </div>
               </div>

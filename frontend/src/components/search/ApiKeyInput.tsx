@@ -5,6 +5,7 @@ import { Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 
 interface ApiKeyInputProps {
     apiKey: string;
@@ -13,15 +14,37 @@ interface ApiKeyInputProps {
     apiKeyThreshold: number;
 }
 
-export function ApiKeyInput({
+export interface ApiKeyInputRef {
+    focusAndHighlight: () => void;
+}
+
+export const ApiKeyInput = forwardRef<ApiKeyInputRef, ApiKeyInputProps>(({
     apiKey,
     required = false,
     apiKeyThreshold,
     onApiKeyChange,
-}: ApiKeyInputProps) {
+}, ref) => {
+    const inputRef = useRef<HTMLInputElement>(null);
+    const [isHighlighted, setIsHighlighted] = useState(false);
+
+    useImperativeHandle(ref, () => ({
+        focusAndHighlight: () => {
+            if (inputRef.current) {
+                inputRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                inputRef.current.focus();
+                setIsHighlighted(true);
+                setTimeout(() => setIsHighlighted(false), 3000);
+            }
+        }
+    }));
+
     return (
-        <div className="relative w-full">
+        <div className={cn(
+            "relative w-full transition-all duration-300",
+            isHighlighted && "ring-2 ring-primary ring-offset-2 ring-offset-background rounded-md"
+        )}>
             <Input
+                ref={inputRef}
                 type="password"
                 autoComplete="off"
                 autoSave="off"
@@ -30,7 +53,8 @@ export function ApiKeyInput({
                 onChange={(e) => onApiKeyChange(e.target.value)}
                 className={cn(
                     "h-9 bg-background text-sm pr-9",
-                    required && !apiKey && "border-destructive"
+                    required && !apiKey && "border-destructive",
+                    isHighlighted && "border-primary"
                 )}
             />
             <div className="absolute right-1 top-0 bottom-0 flex items-center">
@@ -61,4 +85,6 @@ export function ApiKeyInput({
             </div>
         </div>
     );
-} 
+});
+
+ApiKeyInput.displayName = "ApiKeyInput"; 

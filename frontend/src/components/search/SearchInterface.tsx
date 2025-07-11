@@ -1,16 +1,19 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { Octokit } from 'octokit';
 import { Info, RefreshCw } from 'lucide-react';
 import { SearchInput } from './SearchInput';
 import { SearchResults } from './SearchResults';
+import { RateLimitError } from './RateLimitError';
 import { Repository } from '@/components/repository/RepositoryCard';
+import type { SearchResult, RateLimitError as RateLimitErrorType } from '@/types/github';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ApiKeyInput } from './ApiKeyInput';
+import { ApiKeyInput, ApiKeyInputRef } from './ApiKeyInput';
+import { parseRateLimitHeaders } from '@/lib/utils';
 
 const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL;
 
@@ -22,11 +25,17 @@ interface SearchInterfaceProps {
   onApiKeyChange: (value: string) => void;
 }
 
+// Tracks whether we've already attempted to initialize the user during this browser session.
+// Because it's a module-level variable, it survives component unmount/remount cycles.
+let initializationAttempted = false;
+
 export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, apiKey, onApiKeyChange }: SearchInterfaceProps) {
   const { data: session } = useSession();
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isGlobalSearch, setIsGlobalSearch] = useState(false);
+  const [rateLimitError, setRateLimitError] = useState<RateLimitErrorType | null>(null);
+  const apiKeyInputRef = useRef<ApiKeyInputRef>(null);
   const [octokit] = useState<Octokit | null>(() =>
     session?.accessToken ? new Octokit({ auth: session.accessToken }) : null
   );
@@ -34,7 +43,7 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
   const checkUserExists = useCallback(async () => {
     if (!session?.accessToken) return false;
     try {
-      const response = await fetch(`${BACKEND_API_URL}/user-exists`, {
+      const response = await fetch(`${BACKEND_API_URL}/user/exists`, {
         headers: {
           'Authorization': `Bearer ${session.accessToken}`,
         },
@@ -43,7 +52,7 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
         throw new Error('Failed to check user existence');
       }
       const data = await response.json();
-      return data.user_exists;
+      return Boolean(data.user_exists);
     } catch (error) {
       console.error('Error checking user existence:', error);
       return false;
@@ -62,17 +71,23 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
       }
     };
 
-    if (session?.accessToken) {
+    // Run initialization only once per browser session to avoid infinite retry loops
+    if (session?.accessToken && !initializationAttempted) {
+      initializationAttempted = true;
       initializeUser();
     }
-  }, [session?.accessToken, onRefreshStars, checkUserExists, apiKey]);
+    // Intentionally exclude `onRefreshStars` from dependencies to keep the effect stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.accessToken, checkUserExists, apiKey]);
 
   const handleSearch = async (query: string) => {
     if (!octokit || !session?.accessToken) return;
 
     setIsLoading(true);
+    setRateLimitError(null);
+
     try {
-      const endpoint = isGlobalSearch ? 'search-global' : 'search';
+      const endpoint = isGlobalSearch ? 'search_global' : 'search';
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -87,34 +102,54 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
         method: 'GET',
         headers,
       });
+
+      // Parse rate limit headers regardless of response status
+      const rateLimitInfo = parseRateLimitHeaders(response);
+
+      if (rateLimitInfo.isRateLimited) {
+        setRateLimitError({
+          isRateLimited: true,
+          retryAfter: rateLimitInfo.retryAfter,
+          limit: rateLimitInfo.limit,
+          remaining: rateLimitInfo.remaining,
+          message: "You've exceeded the search rate limit. Please wait before trying again.",
+        });
+        setRepositories([]); // Clear previous results
+        return;
+      }
+
       if (!response.ok) {
         throw new Error('Failed to fetch search results');
       }
+
       const data = await response.json();
 
-      setRepositories(data.map((repo: {
-        id: number;
-        name: string;
-        full_name: string;
-        description: string | null;
-        url: string;
-        topics: string[];
-        owner: {
-          login: string;
-          avatar_url: string;
-        };
-      }) => ({
-        id: repo.id,
-        name: repo.name,
-        fullName: repo.full_name,
-        description: repo.description,
-        url: repo.url,
-        topics: repo.topics || [],
-        owner: {
-          login: repo.owner.login,
-          avatarUrl: repo.owner.avatar_url
-        }
-      })));
+      // Rust backend returns {results: [{repository, similarity_score}], ...},
+      // Fallback to legacy array for backward compatibility
+      const reposArray = Array.isArray(data) ? data : data.results ?? [];
+
+      setRepositories(reposArray.map((item: SearchResult | Repository) => {
+        const repo = 'repository' in item ? item.repository : item;
+        // Handle the backend API response structure
+        const ownerLogin = typeof repo.owner === 'string' ? repo.owner : repo.owner?.login || 'unknown';
+
+        return {
+          id: typeof repo.id === 'string' ? parseInt(repo.id, 10) : repo.id,
+          name: repo.name,
+          fullName: `${ownerLogin}/${repo.name}`,
+          description: repo.description,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          url: (repo as any).homepage_url || repo.url || `https://github.com/${ownerLogin}/${repo.name}`,
+          topics: repo.topics || [],
+          owner: {
+            login: ownerLogin,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            avatarUrl: typeof repo.owner === 'object' && repo.owner?.avatarUrl
+              ? repo.owner.avatarUrl
+              : `https://github.com/${ownerLogin}.png`,
+          },
+        } as Repository;
+      }));
     } catch (error) {
       console.error("Error searching repositories:", error);
     } finally {
@@ -123,6 +158,13 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
   };
 
   const requiresApiKey = totalStars > apiKeyThreshold;
+
+  const handleApiKeyClick = () => {
+    // Focus and highlight the API key input
+    if (apiKeyInputRef.current) {
+      apiKeyInputRef.current.focusAndHighlight();
+    }
+  };
 
   return (
     <div className="flex flex-col gap-8">
@@ -147,6 +189,7 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
           </div>
 
           <ApiKeyInput
+            ref={apiKeyInputRef}
             apiKey={apiKey}
             onApiKeyChange={onApiKeyChange}
             apiKeyThreshold={apiKeyThreshold}
@@ -184,11 +227,18 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
           </div>
         </div>
 
-        <SearchResults
-          repositories={repositories}
-          isLoading={isLoading}
-          emptyMessage="Enter a search query to find repositories"
-        />
+        {rateLimitError ? (
+          <RateLimitError
+            error={rateLimitError}
+            onApiKeyClick={handleApiKeyClick}
+          />
+        ) : (
+          <SearchResults
+            repositories={repositories}
+            isLoading={isLoading}
+            emptyMessage="Enter a search query to find repositories"
+          />
+        )}
       </>
     </div>
   );
