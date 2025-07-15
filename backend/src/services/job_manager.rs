@@ -169,6 +169,14 @@ impl JobManager {
         database
             .update_job_status(job_id, "Fetching stars...")
             .await?;
+        database
+            .update_job_progress(
+                job_id,
+                starred_repos_count.try_into().expect("holds for x86_64"),
+                0,
+                0,
+            )
+            .await?;
 
         // Fetch starred repositories via GitHub client
         let octo_repos = github_client.get_starred_repos(starred_repos_count).await?;

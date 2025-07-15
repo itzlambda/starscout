@@ -27,10 +27,12 @@ export function useGithubStars() {
 
       if (!data.job || data.job.status === 'completed' || data.job.status === 'failed') {
         setProcessingStars(false);
+        setIsRefreshing(false);
       }
     } catch (error) {
       console.error("Error polling job status:", error);
       setProcessingStars(false);
+      setIsRefreshing(false);
     }
   }, [session]);
 

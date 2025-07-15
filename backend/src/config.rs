@@ -22,8 +22,6 @@ pub struct AppConfig {
     pub ai_model_name: String,
     pub ai_embedding_vector_dimension: u16,
 
-    pub api_key_star_threshold: u16,
-
     pub allowed_origins: Vec<String>,
     pub log_level: String,
 }
@@ -38,7 +36,7 @@ impl Default for AppConfig {
             db_port: 5432,
 
             github_api_url: "https://api.github.com".to_string(),
-            github_star_threshold: 100,
+            github_star_threshold: 1000,
             github_following_threshold: 50,
 
             api_host: "0.0.0.0".to_string(),
@@ -48,8 +46,6 @@ impl Default for AppConfig {
             ai_api_key: String::new(),
             ai_model_name: "text-embedding-3-small".to_string(),
             ai_embedding_vector_dimension: 1536,
-
-            api_key_star_threshold: 5000,
 
             allowed_origins: vec!["http://localhost:3000".to_string()],
             log_level: "info".to_string(),

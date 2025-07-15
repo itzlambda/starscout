@@ -36,7 +36,7 @@ pub fn build_router(state: AppState) -> Router {
         GovernorConfigBuilder::default()
             .use_headers()
             .key_extractor(UserToken)
-            .per_second(60) // 6 seconds between requests = 10 per minute
+            .per_second(60)
             .burst_size(5)
             .finish()
             .unwrap(),

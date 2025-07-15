@@ -38,12 +38,12 @@ pub async fn generate_embeddings_handler(
         }
     };
 
-    if starred_repos_count > app_state.config.api_key_star_threshold.into()
+    if starred_repos_count > app_state.config.github_star_threshold.into()
         && user_provided_key.is_none()
     {
         return internal_error(format!(
             "API key required: User has {starred_repos_count} starred repos (>{}). Please provide your own API key in the Api_key header.",
-            app_state.config.api_key_star_threshold
+            app_state.config.github_star_threshold
         ));
     }
 

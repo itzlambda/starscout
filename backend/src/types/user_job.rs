@@ -23,7 +23,7 @@ pub struct UserJob {
     /// Job last update timestamp
     pub updated_at: DateTime<Utc>,
     /// Job completion timestamp
-    pub completed_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
 }
 
 impl UserJob {
