@@ -2,15 +2,13 @@
 
 import { useSession } from "next-auth/react";
 import { useGithubStars } from "@/hooks/useGithubStars";
-import { ProcessingStatus } from "@/components/github/ProcessingStatus";
-import { SearchInterface } from "@/components/search/SearchInterface";
 import { RateLimitError } from "@/components/search/RateLimitError";
 import { LandingContent } from "@/components/landing/LandingContent";
 import { OnboardingContent } from "@/components/onboarding/OnboardingContent";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { GridBackground } from "@/components/ui/GridBackground";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense, lazy } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Session } from "next-auth"
 import { useBackendHealth } from "@/hooks/useBackendHealth";
@@ -18,6 +16,10 @@ import { MaintenancePage } from "@/components/maintenance/MaintenancePage";
 import { apiClient } from "@/lib/api-client";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { ErrorBoundary } from "@/components/error/ErrorBoundary";
+
+// Lazy load large components to improve initial bundle size
+const ProcessingStatus = lazy(() => import("@/components/github/ProcessingStatus").then(module => ({ default: module.ProcessingStatus })));
+const SearchInterface = lazy(() => import("@/components/search/SearchInterface").then(module => ({ default: module.SearchInterface })));
 
 export default function Home() {
   const { data: session }: { data: Session | null } = useSession();
@@ -152,17 +154,21 @@ export default function Home() {
               </ErrorBoundary>
             ) : processingStars ? (
               <ErrorBoundary>
-                <ProcessingStatus jobStatus={jobStatus} isRefreshing={isRefreshing} />
+                <Suspense fallback={<Skeleton className="h-[300px] w-full rounded-xl" />}>
+                  <ProcessingStatus jobStatus={jobStatus} isRefreshing={isRefreshing} />
+                </Suspense>
               </ErrorBoundary>
             ) : (
               <ErrorBoundary>
-                <SearchInterface
-                  onRefreshStars={refreshStars}
-                  totalStars={totalStars}
-                  apiKeyThreshold={apiKeyThreshold}
-                  apiKey={apiKey}
-                  onApiKeyChange={setApiKey}
-                />
+                <Suspense fallback={<Skeleton className="h-[600px] w-full rounded-xl" />}>
+                  <SearchInterface
+                    onRefreshStars={refreshStars}
+                    totalStars={totalStars}
+                    apiKeyThreshold={apiKeyThreshold}
+                    apiKey={apiKey}
+                    onApiKeyChange={setApiKey}
+                  />
+                </Suspense>
               </ErrorBoundary>
             )}
           </div>
