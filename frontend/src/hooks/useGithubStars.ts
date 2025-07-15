@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { UserJob, RateLimitError } from '@/types/github';
 import { useSession } from 'next-auth/react';
 import type { Session } from 'next-auth';
 import { apiClient } from '@/lib/api-client';
 import { useUserExists } from './useUserExists';
+import { usePolling } from './usePolling';
 
 export function useGithubStars() {
   const { data: session } = useSession() as { data: Session | null };
@@ -33,6 +34,17 @@ export function useGithubStars() {
       setIsRefreshing(false);
     }
   }, [session]);
+
+  // Use polling hook for job status updates
+  usePolling(pollJobStatus, {
+    enabled: processingStars,
+    interval: 3000, // Poll every 3 seconds
+    onError: (error) => {
+      console.error('Error polling job status:', error);
+      setProcessingStars(false);
+      setIsRefreshing(false);
+    },
+  });
 
   // Checks if there is an existing job for the user
   const checkExistingJobs = useCallback(async () => {
@@ -78,16 +90,6 @@ export function useGithubStars() {
       setIsRefreshing(false);
     }
   }, [session, pollJobStatus]);
-
-  useEffect(() => {
-    // Poll job status every 3 seconds if processing
-    if (processingStars) {
-      const interval = setInterval(() => {
-        pollJobStatus();
-      }, 3000);
-      return () => clearInterval(interval);
-    }
-  }, [processingStars, pollJobStatus]);
 
   const startProcessing = async (apiKey?: string) => {
     // Step 1: check if the user already exists in the backend
