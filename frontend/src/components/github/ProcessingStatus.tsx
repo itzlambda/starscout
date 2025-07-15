@@ -4,10 +4,9 @@ import { Progress } from "@/components/ui/progress";
 
 interface ProcessingStatusProps {
   jobStatus: UserJob | null;
-  isRefreshing: boolean;
 }
 
-export function ProcessingStatus({ jobStatus, isRefreshing }: ProcessingStatusProps) {
+export function ProcessingStatus({ jobStatus }: ProcessingStatusProps) {
   const progressPercentage = jobStatus && jobStatus.total_repos > 0
     ? (jobStatus.processed_repos / jobStatus.total_repos) * 100
     : 0;
@@ -17,10 +16,10 @@ export function ProcessingStatus({ jobStatus, isRefreshing }: ProcessingStatusPr
       <div className="flex items-center justify-center space-x-2">
         <Loader2 className="h-5 w-5 animate-spin text-primary" />
         <h3 className="text-lg font-medium">
-          {isRefreshing ? "Refreshing" : "Processing"} your starred repositories
+          Processing your starred repositories
         </h3>
       </div>
-      
+
       {jobStatus && (
         <div className="space-y-2">
           <div className="flex justify-between text-sm text-muted-foreground">

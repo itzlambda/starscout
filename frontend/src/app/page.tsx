@@ -21,7 +21,7 @@ const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL;
 export default function Home() {
   const { data: session }: { data: Session | null } = useSession();
   const { isBackendHealthy } = useBackendHealth();
-  const { processingStars, jobStatus, isRefreshing, rateLimitError, refreshStars, startProcessing } = useGithubStars();
+  const { processingStars, jobStatus, rateLimitError, refreshStars, startProcessing } = useGithubStars();
   const [totalStars, setTotalStars] = useState<number>(0);
   const [hasStartedProcessing, setHasStartedProcessing] = useState(false);
   const [currentView, setCurrentView] = useState<'home' | 'search'>(hasStartedProcessing ? 'search' : 'home');
@@ -160,7 +160,7 @@ export default function Home() {
                 }}
               />
             ) : processingStars ? (
-              <ProcessingStatus jobStatus={jobStatus} isRefreshing={isRefreshing} />
+              <ProcessingStatus jobStatus={jobStatus} />
             ) : (
               <SearchInterface
                 onRefreshStars={refreshStars}
