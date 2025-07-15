@@ -43,15 +43,15 @@ export const ApiKeyInput = forwardRef<ApiKeyInputRef, ApiKeyInputProps>(({
     }));
 
     const hasError = required && !apiKey;
-    const helpText = `OpenAI API key is used to calculate embeddings for the repositories and search query. Even though its not stored on our servers, we suggest revoking it after use. It is required if you have more than ${apiKeyThreshold} stars.`;
+    const helpText = `OpenAI API key for calculating embeddings when refreshing stars. ${required ? 'Required for users with many stars.' : 'Optional but helps avoid rate limits.'}`;
 
     return (
         <div className={cn(
             "relative w-full transition-all duration-300",
-            isHighlighted && "ring-2 ring-primary ring-offset-2 ring-offset-background rounded-md"
+            isHighlighted && "ring-2 ring-primary ring-offset-2 ring-offset-background rounded-lg"
         )}>
             <Label htmlFor={inputId} className="sr-only">
-                OpenAI API Key {required ? "(required)" : "(optional)"}
+                OpenAI API Key for refreshing stars {required ? "(required)" : "(optional)"}
             </Label>
             <Input
                 id={inputId}
@@ -59,15 +59,16 @@ export const ApiKeyInput = forwardRef<ApiKeyInputRef, ApiKeyInputProps>(({
                 type="password"
                 autoComplete="off"
                 autoSave="off"
-                placeholder={"OpenAI API Key" + (required ? " (required)" : " (optional)")}
+                placeholder={required ? "OpenAI API Key (required)" : "OpenAI API Key (recommended)"}
                 value={apiKey}
                 onChange={(e) => onApiKeyChange(e.target.value)}
                 className={cn(
-                    "h-9 bg-background text-sm pr-9",
-                    hasError && "border-destructive",
-                    isHighlighted && "border-primary"
+                    "h-9 bg-background text-sm pr-10 transition-colors",
+                    hasError && "border-amber-300 dark:border-amber-700 focus:border-amber-500 dark:focus:border-amber-400",
+                    isHighlighted && "border-primary shadow-sm",
+                    !hasError && !isHighlighted && "border-border focus:border-primary"
                 )}
-                aria-label={`OpenAI API Key ${required ? "(required)" : "(optional)"}`}
+                aria-label={`OpenAI API Key for refreshing stars ${required ? "(required)" : "(recommended)"}`}
                 aria-describedby={`${helpId} ${hasError ? errorId : ''}`}
                 aria-invalid={hasError}
                 aria-required={required}
@@ -76,7 +77,7 @@ export const ApiKeyInput = forwardRef<ApiKeyInputRef, ApiKeyInputProps>(({
             {/* Error message for screen readers */}
             {hasError && (
                 <div id={errorId} className="sr-only" aria-live="polite">
-                    OpenAI API Key is required for users with more than {apiKeyThreshold} stars
+                    OpenAI API Key is required for refreshing stars when you have more than {apiKeyThreshold} stars
                 </div>
             )}
 
@@ -88,14 +89,14 @@ export const ApiKeyInput = forwardRef<ApiKeyInputRef, ApiKeyInputProps>(({
                                 variant="ghost"
                                 size="icon"
                                 type="button"
-                                className="h-7 w-7 cursor-pointer"
-                                aria-label="OpenAI API Key information"
+                                className="h-7 w-7 cursor-pointer text-muted-foreground hover:text-foreground"
+                                aria-label="OpenAI API Key for refreshing information"
                                 aria-describedby={helpId}
                             >
                                 <Info className="h-4 w-4" aria-hidden="true" />
                             </Button>
                         </TooltipTrigger>
-                        <TooltipContent id={helpId} role="tooltip">
+                        <TooltipContent id={helpId} role="tooltip" className="max-w-sm">
                             <p className="text-center">
                                 {helpText}
                             </p>

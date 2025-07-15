@@ -36,7 +36,7 @@ impl Default for AppConfig {
             db_port: 5432,
 
             github_api_url: "https://api.github.com".to_string(),
-            github_star_threshold: 1000,
+            github_star_threshold: 500,
             github_following_threshold: 50,
 
             api_host: "0.0.0.0".to_string(),

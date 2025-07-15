@@ -50,7 +50,12 @@ export function SearchInput({
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={handleKeyDown}
-        className="pl-10 h-12 bg-background border-input w-full"
+        className={cn(
+          "pl-10 h-12 bg-background border-input w-full transition-all duration-200",
+          "focus:ring-2 focus:ring-primary/20 focus:border-primary",
+          "placeholder:text-muted-foreground/70",
+          disabled && "opacity-50 cursor-not-allowed"
+        )}
         disabled={disabled}
         aria-label="Search repositories"
         aria-describedby={disabled && disabledTooltip ? `${inputId}-help` : undefined}
@@ -70,7 +75,7 @@ export function SearchInput({
       <div className="relative">
         <Search
           className={cn(
-            "absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground",
+            "absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground transition-colors",
             disabled && "opacity-50"
           )}
           aria-hidden="true"

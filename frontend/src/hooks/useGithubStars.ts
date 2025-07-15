@@ -77,6 +77,7 @@ export function useGithubStars() {
 
       if (isRateLimited) {
         setProcessingStars(false);
+        setIsRefreshing(false);
         return;
       }
 
@@ -85,54 +86,67 @@ export function useGithubStars() {
     } catch (error) {
       console.error("Error processing starred repositories:", error);
       setProcessingStars(false);
+      setIsRefreshing(false);
     }
   }, [session, pollJobStatus, rateLimit]);
 
   const startProcessing = async (apiKey?: string) => {
-    // Step 1: check if the user already exists in the backend
-    const userExists = await checkUserExists(session?.accessToken || '');
+    try {
+      // Step 1: check if the user already exists in the backend
+      const userExists = await checkUserExists(session?.accessToken || '');
 
-    // Step 2: if the user exists, check for any running job
-    let jobInfo = { job: null as UserJob | null, is_running: false };
-    if (userExists) {
-      jobInfo = await checkExistingJobs();
+      // Step 2: if the user exists, check for any running job
+      let jobInfo = { job: null as UserJob | null, is_running: false };
+      if (userExists) {
+        jobInfo = await checkExistingJobs();
+      }
+
+      const { job, is_running } = jobInfo;
+
+      if (is_running && job) {
+        // A job is already in progress – just start polling its status
+        setProcessingStars(true);
+        setJobStatus(job);
+        await pollJobStatus();
+        return;
+      }
+
+      // If the user doesn't exist or no job is running, start a new job
+      await processUserStars(apiKey);
+    } catch (error) {
+      console.error("Error in startProcessing:", error);
+      setProcessingStars(false);
+      setIsRefreshing(false);
     }
-
-    const { job, is_running } = jobInfo;
-
-    if (is_running && job) {
-      // A job is already in progress – just start polling its status
-      setProcessingStars(true);
-      setJobStatus(job);
-      await pollJobStatus();
-      return;
-    }
-
-    // If the user doesn't exist or no job is running, start a new job
-    await processUserStars(apiKey);
   };
 
   const refreshStars = async (apiKey?: string) => {
-    // Always attempt to refresh but avoid starting a duplicate job
-    const userExists = await checkUserExists(session?.accessToken || '');
+    try {
+      // Always attempt to refresh but avoid starting a duplicate job
+      const userExists = await checkUserExists(session?.accessToken || '');
 
-    let jobInfo = { job: null as UserJob | null, is_running: false };
-    if (userExists) {
-      jobInfo = await checkExistingJobs();
+      let jobInfo = { job: null as UserJob | null, is_running: false };
+      if (userExists) {
+        jobInfo = await checkExistingJobs();
+      }
+
+      const { job, is_running } = jobInfo;
+
+      if (is_running && job) {
+        // Job already running – just continue polling
+        setProcessingStars(true);
+        setJobStatus(job);
+        await pollJobStatus();
+        return;
+      }
+
+      // Start a new job if none is running
+      await processUserStars(apiKey, true);
+    } catch (error) {
+      console.error("Error in refreshStars:", error);
+      setProcessingStars(false);
+      setIsRefreshing(false);
     }
-
-    const { job, is_running } = jobInfo;
-
-    if (is_running && job) {
-      // Job already running – just continue polling
-      setProcessingStars(true);
-      setJobStatus(job);
-      await pollJobStatus();
-      return;
-    }
-
-    // Start a new job if none is running
-    await processUserStars(apiKey, true);
   };
 
   return {

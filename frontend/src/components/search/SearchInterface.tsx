@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useId } from 'react';
 import { useSession } from 'next-auth/react';
-import { Info, RefreshCw, Loader2 } from 'lucide-react';
+import { Info, RefreshCw, Loader2, AlertTriangle } from 'lucide-react';
 import { SearchInput } from './SearchInput';
 import { SearchResults } from './SearchResults';
 import { RateLimitError } from './RateLimitError';
@@ -33,6 +33,7 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
   const [isGlobalSearch, setIsGlobalSearch] = useState(false);
   const rateLimit = useRateLimit();
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const apiKeyInputRef = useRef<ApiKeyInputRef>(null);
 
   const { hasInitializationBeenAttempted, markInitializationAttempted } = useInitialization();
@@ -40,6 +41,16 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
 
   // Use SWR for caching user existence check
   const { userExists, isLoadingUserExists } = useUserExistsCheck(session?.accessToken);
+
+  // Star threshold logic - define early so it can be used in callbacks
+  const exceedsStarThreshold = totalStars > apiKeyThreshold;
+
+  // New user with high stars - disable search entirely until API key provided
+  // Wait for user existence check to complete before making this decision
+  const shouldDisableSearch = !isLoadingUserExists && !userExists && exceedsStarThreshold && !apiKey;
+
+  // Existing user with high stars - disable refresh only until API key provided  
+  const shouldDisableRefresh = exceedsStarThreshold && !apiKey;
 
   // Accessibility IDs
   const searchSectionId = useId();
@@ -50,7 +61,8 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
     const initializeUser = async () => {
       try {
         // Use cached user existence from SWR
-        if (!userExists && !isLoadingUserExists) {
+        // Only auto-process if user doesn't exist AND is below star threshold
+        if (!userExists && !isLoadingUserExists && !exceedsStarThreshold) {
           await onRefreshStars(apiKey);
         }
       } catch (error) {
@@ -65,7 +77,7 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
     }
     // Intentionally exclude `onRefreshStars` from dependencies to keep the effect stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.accessToken, apiKey, userExists, isLoadingUserExists]);
+  }, [session?.accessToken, apiKey, userExists, isLoadingUserExists, exceedsStarThreshold]);
 
   // Memoized repository transformation function
   const transformRepositories = useCallback((reposArray: (SearchResult | Repository)[]): Repository[] => {
@@ -93,9 +105,26 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
 
   // Handle star refresh - invalidate cache
   const handleRefreshStars = useCallback((apiKey?: string) => {
+    // Clear any previous refresh errors
+    setRefreshError(null);
+
+    // Check if API key is required for refresh and missing
+    if (shouldDisableRefresh) {
+      const message = !userExists
+        ? `API key is required when you have more than ${apiKeyThreshold} stars and are a new user. Please provide your OpenAI API key below.`
+        : `API key is required to refresh stars when you have more than ${apiKeyThreshold} stars. Please provide your OpenAI API key below.`;
+
+      setRefreshError(message);
+      // Focus and highlight the API key input
+      if (apiKeyInputRef.current) {
+        apiKeyInputRef.current.focusAndHighlight();
+      }
+      return;
+    }
+
     searchCache.invalidateAll();
     onRefreshStars(apiKey);
-  }, [searchCache, onRefreshStars]);
+  }, [searchCache, onRefreshStars, shouldDisableRefresh, apiKeyThreshold, userExists]);
 
   const handleSearch = async (query: string) => {
     if (!session?.accessToken) return;
@@ -162,8 +191,6 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
     }
   };
 
-  const requiresApiKey = totalStars > apiKeyThreshold;
-
   const handleApiKeyClick = () => {
     // Focus and highlight the API key input
     if (apiKeyInputRef.current) {
@@ -171,87 +198,133 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
     }
   };
 
+  // Clear refresh error when API key changes
+  useEffect(() => {
+    if (refreshError && apiKey) {
+      setRefreshError(null);
+    }
+  }, [apiKey, refreshError]);
+
   return (
     <main className="flex flex-col gap-8" role="main" aria-label="Repository search interface">
       <section id={searchSectionId} aria-labelledby="search-heading" className="flex flex-col gap-6">
         <h2 id="search-heading" className="sr-only">Repository Search</h2>
 
-        <div className="flex justify-between items-start gap-4" role="toolbar" aria-label="Search controls">
-          <div className="flex-1">
-            <SearchInput
-              onSearch={handleSearch}
-              disabled={requiresApiKey && !apiKey}
-              disabledTooltip='Please provide your OpenAI API key to enable search'
-            />
-          </div>
-          <Button
-            id={refreshButtonId}
-            onClick={() => handleRefreshStars(apiKey)}
-            variant="outline"
-            className="flex items-center gap-2 h-12 whitespace-nowrap cursor-pointer"
-            aria-label={`${isRefreshing ? 'Refreshing' : 'Refresh'} your ${totalStars} starred repositories`}
-            disabled={isRefreshing}
-          >
-            {isRefreshing ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <RefreshCw className="h-4 w-4" aria-hidden="true" />
-            )}
-            <span className="sm:block hidden">
-              {isRefreshing ? 'Refreshing...' : 'Refresh Stars'}
-            </span>
-          </Button>
-        </div>
-
-        <div role="group" aria-labelledby="api-key-heading">
-          <h3 id="api-key-heading" className="sr-only">API Key Configuration</h3>
-          <ApiKeyInput
-            ref={apiKeyInputRef}
-            apiKey={apiKey}
-            onApiKeyChange={onApiKeyChange}
-            apiKeyThreshold={apiKeyThreshold}
-            required={requiresApiKey}
+        <div className="flex flex-col gap-4">
+          {/* Search Input - Disabled for new users with high stars until API key provided */}
+          <SearchInput
+            onSearch={handleSearch}
+            disabled={shouldDisableSearch}
+            disabledTooltip={shouldDisableSearch ? `API key is required to search when you have more than ${apiKeyThreshold} stars and are a new user. Please provide your OpenAI API key below.` : undefined}
           />
-        </div>
 
-        <div className="flex items-center gap-2 bg-secondary/5 rounded-lg p-3" role="group" aria-labelledby="search-options-heading">
-          <h3 id="search-options-heading" className="sr-only">Search Options</h3>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex items-center">
-                  <label htmlFor={globalSearchId} className="text-sm text-muted-foreground cursor-pointer">
-                    Global Search
-                  </label>
+          {/* Refresh Error */}
+          {refreshError && (
+            <div className="flex items-start gap-2 p-2 bg-destructive/10 border border-destructive/20 rounded text-destructive text-xs" role="alert" aria-live="polite">
+              <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" aria-hidden="true" />
+              <span>{refreshError}</span>
+            </div>
+          )}
+
+          {/* Horizontal: API Key Input + Refresh Button */}
+          <div className="flex items-center gap-2">
+            <div className="flex-1">
+              <ApiKeyInput
+                ref={apiKeyInputRef}
+                apiKey={apiKey}
+                onApiKeyChange={onApiKeyChange}
+                apiKeyThreshold={apiKeyThreshold}
+                required={shouldDisableSearch || shouldDisableRefresh}
+              />
+            </div>
+            {shouldDisableRefresh ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-block">
+                    <Button
+                      id={refreshButtonId}
+                      onClick={() => handleRefreshStars(apiKey)}
+                      variant="outline"
+                      size="sm"
+                      className="flex items-center gap-2 whitespace-nowrap"
+                      aria-label={`${isRefreshing ? 'Refreshing' : 'Refresh'} your ${totalStars} starred repositories`}
+                      disabled={isRefreshing || shouldDisableRefresh}
+                    >
+                      {isRefreshing ? (
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                      )}
+                      <span>
+                        {isRefreshing ? 'Refreshing...' : 'Refresh Stars'}
+                      </span>
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>You have more than {apiKeyThreshold} stars, so an API key is required to refresh stars.</p>
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <Button
+                id={refreshButtonId}
+                onClick={() => handleRefreshStars(apiKey)}
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2 whitespace-nowrap"
+                aria-label={`${isRefreshing ? 'Refreshing' : 'Refresh'} your ${totalStars} starred repositories`}
+                disabled={isRefreshing || shouldDisableRefresh}
+              >
+                {isRefreshing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                )}
+                <span>
+                  {isRefreshing ? 'Refreshing...' : 'Refresh Stars'}
+                </span>
+              </Button>
+            )}
+          </div>
+
+          {/* Global Search Toggle - Small and compact */}
+          <div className="flex items-center gap-2 px-3 py-2" role="group" aria-labelledby="search-options-heading">
+            <h3 id="search-options-heading" className="sr-only">Search Options</h3>
+            <label htmlFor={globalSearchId} className="text-sm text-muted-foreground cursor-pointer">
+              Global Search
+            </label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
                     size="icon"
                     type="button"
-                    className="h-7 w-7 cursor-pointer"
+                    className="h-5 w-5 cursor-pointer text-muted-foreground hover:text-foreground"
                     aria-label="Global search information"
                   >
-                    <Info className="h-4 w-4" aria-hidden="true" />
+                    <Info className="h-3 w-3" aria-hidden="true" />
                   </Button>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent className="max-w-[300px]" role="tooltip">
-                <p>
-                  When enabled, the search will be performed across all repositories in our database, not just your starred ones. This helps you discover new repositories you haven&apos;t starred yet.
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <Switch
-            id={globalSearchId}
-            checked={isGlobalSearch}
-            onCheckedChange={setIsGlobalSearch}
-            aria-describedby="global-search-description"
-          />
-          <div id="global-search-description" className="sr-only">
-            {isGlobalSearch
-              ? "Global search is enabled - searching across all repositories"
-              : "Global search is disabled - searching only your starred repositories"
-            }
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[300px]" role="tooltip">
+                  <p>
+                    When enabled, search across all repositories in our database, not just your starred ones.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <Switch
+              id={globalSearchId}
+              checked={isGlobalSearch}
+              onCheckedChange={setIsGlobalSearch}
+              aria-describedby="global-search-description"
+            />
+            <div id="global-search-description" className="sr-only">
+              {isGlobalSearch
+                ? "Global search is enabled - searching across all repositories"
+                : "Global search is disabled - searching only your starred repositories"
+              }
+            </div>
           </div>
         </div>
       </section>
@@ -264,6 +337,16 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
               error={rateLimit.rateLimitError}
               onApiKeyClick={handleApiKeyClick}
             />
+          </div>
+        ) : shouldDisableSearch ? (
+          <div className="flex items-start gap-3 p-6 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive" role="alert" aria-live="polite">
+            <AlertTriangle className="h-5 w-5 mt-0.5 flex-shrink-0" aria-hidden="true" />
+            <div className="space-y-2">
+              <h3 className="font-semibold text-lg">API Key Required</h3>
+              <p className="text-sm leading-relaxed">
+                You have more than {apiKeyThreshold} starred repositories. An OpenAI API key is required to index your stars.
+              </p>
+            </div>
           </div>
         ) : (
           <div role="region" aria-live="polite" aria-label="Repository search results">
