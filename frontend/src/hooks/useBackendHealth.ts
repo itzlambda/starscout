@@ -1,35 +1,34 @@
 import { useState, useEffect } from 'react';
-
-const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL;
-const HEALTH_CHECK_INTERVAL = 10000; // Check every 10 seconds
+import { useHealthCheck } from './useSwrApi';
 
 export function useBackendHealth() {
-  const [isBackendHealthy, setIsBackendHealthy] = useState(true);
+  const [isTabVisible, setIsTabVisible] = useState(true);
 
+  // Handle page visibility changes
   useEffect(() => {
-    const checkHealth = async () => {
-      try {
-        const response = await fetch(`${BACKEND_API_URL}/`);
-        if (!response.ok) {
-          throw new Error('Backend health check failed');
-        }
-        const data = await response.json();
-        setIsBackendHealthy(data.status === 'healthy');
-      } catch (error) {
-        console.error('Backend health check error:', error);
-        setIsBackendHealthy(false);
-      }
+    const handleVisibilityChange = () => {
+      setIsTabVisible(!document.hidden);
     };
 
-    // Check health immediately
-    checkHealth();
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      // Set initial state
+      setIsTabVisible(!document.hidden);
 
-    // Set up periodic health checks
-    const interval = setInterval(checkHealth, HEALTH_CHECK_INTERVAL);
-
-    // Clean up interval on unmount
-    return () => clearInterval(interval);
+      return () => {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      };
+    }
   }, []);
 
-  return { isBackendHealthy };
+  // Use SWR for health checking with tab visibility optimization
+  const { isBackendHealthy, isLoadingHealth, healthError, recheckHealth } = useHealthCheck(isTabVisible);
+
+  return { 
+    isBackendHealthy,
+    isTabVisible,
+    isLoadingHealth,
+    healthError,
+    recheckHealth,
+  };
 } 

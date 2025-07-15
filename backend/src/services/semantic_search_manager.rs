@@ -354,14 +354,11 @@ impl SemanticSearchManager {
                 Ok(results)
             }
             SearchScope::Starred { user_id } => {
-                debug!(
-                    "Performing semantic search on starred repos for user: {}, query: '{}', top_k: {}",
-                    user_id, query, top_k
-                );
+                debug!(query, top_k, "Performing semantic search on starred repos",);
                 // Get user's starred repository IDs to check if user has stars
                 let starred_repo_ids = self.get_user_starred_repo_ids_by_string(user_id).await?;
                 if starred_repo_ids.is_empty() {
-                    debug!("User {} has no starred repositories", user_id);
+                    debug!("User has no starred repositories",);
                     return Ok(Vec::new());
                 }
                 // Generate embedding for the query
@@ -372,9 +369,8 @@ impl SemanticSearchManager {
                     .semantic_search_starred_repositories(&query_embedding, user_id, top_k)
                     .await?;
                 info!(
-                    "Found {} results for starred repositories search for user {}",
+                    "Found {} results for starred repositories search",
                     results.len(),
-                    user_id
                 );
                 Ok(results)
             }

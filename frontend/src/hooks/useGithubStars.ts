@@ -1,64 +1,28 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
-import { UserJob, RateLimitError } from '@/types/github';
+import { useState, useCallback } from 'react';
+import { UserJob } from '@/types/github';
 import { useSession } from 'next-auth/react';
 import type { Session } from 'next-auth';
-import { parseRateLimitHeaders } from '@/lib/utils';
-
-const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL;
+import { apiClient } from '@/lib/api-client';
+import { useUserExists } from './useUserExists';
+import { usePolling } from './usePolling';
+import { useRateLimit } from './useRateLimit';
 
 export function useGithubStars() {
   const { data: session } = useSession() as { data: Session | null };
   const [processingStars, setProcessingStars] = useState(false);
   const [jobStatus, setJobStatus] = useState<UserJob | null>(null);
-  const [rateLimitError, setRateLimitError] = useState<RateLimitError | null>(null);
-
-  // Checks if the authenticated user exists in the backend
-  const checkUserExists = useCallback(async (): Promise<boolean> => {
-    if (!session?.accessToken) return false;
-
-    try {
-      const response = await fetch(`${BACKEND_API_URL}/user/exists`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${session.accessToken}`
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to check if user exists');
-      }
-
-      const data = await response.json();
-      return Boolean(data.user_exists);
-    } catch (error) {
-      console.error('Error checking if user exists:', error);
-      return false;
-    }
-  }, [session]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const rateLimit = useRateLimit();
+  const { checkUserExists } = useUserExists();
 
   // Polls the /jobs/status endpoint for the current user's job
   const pollJobStatus = useCallback(async () => {
     if (!session?.accessToken) return;
 
     try {
-      const response = await fetch(`${BACKEND_API_URL}/jobs/status`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${session.accessToken}`
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to get job status');
-      }
-
-      const data = await response.json();
+      const data = await apiClient.getJobStatus(session.accessToken);
       setJobStatus(data.job);
 
       if (!data.job || data.job.status === 'completed' || data.job.status === 'failed') {
@@ -70,25 +34,22 @@ export function useGithubStars() {
     }
   }, [session]);
 
+  // Use polling hook for job status updates
+  usePolling(pollJobStatus, {
+    enabled: processingStars,
+    interval: 3000, // Poll every 3 seconds
+    onError: (error) => {
+      console.error('Error polling job status:', error);
+      setProcessingStars(false);
+      setIsRefreshing(false);
+    },
+  });
+
   // Checks if there is an existing job for the user
   const checkExistingJobs = useCallback(async () => {
     if (!session?.accessToken) return { job: null, is_running: false };
     try {
-      const response = await fetch(`${BACKEND_API_URL}/jobs/status`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${session.accessToken}`
-        },
-      });
-      if (!response.ok) {
-        if (response.status === 404) {
-          return { job: null, is_running: false };
-        }
-        throw new Error('Failed to check existing jobs');
-      }
-      const data = await response.json();
+      const data = await apiClient.getJobStatus(session.accessToken);
       return { job: data.job, is_running: data.is_running };
     } catch (error) {
       console.error("Error checking existing jobs:", error);
@@ -97,45 +58,24 @@ export function useGithubStars() {
   }, [session]);
 
   // Triggers the backend to start processing stars
-  const processUserStars = useCallback(async (apiKey?: string) => {
+  const processUserStars = useCallback(async (apiKey?: string, forceRefresh = false) => {
     if (!session?.accessToken) return;
 
     try {
       setProcessingStars(true);
-      setRateLimitError(null);
+      setIsRefreshing(forceRefresh);
+      rateLimit.clearRateLimit();
 
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${session.accessToken}`
-      };
+      const { rateLimitInfo } = await apiClient.processUserStars(session.accessToken, apiKey);
 
-      if (apiKey) {
-        headers['api_key'] = apiKey;
-      }
+      const isRateLimited = rateLimit.handleRateLimitInfo(
+        rateLimitInfo,
+        "You've exceeded the star processing rate limit. Please wait before trying again."
+      );
 
-      const response = await fetch(`${BACKEND_API_URL}/user/process_star`, {
-        method: 'GET',
-        headers,
-      });
-
-      // Parse rate limit headers regardless of response status
-      const rateLimitInfo = parseRateLimitHeaders(response);
-
-      if (rateLimitInfo.isRateLimited) {
-        setRateLimitError({
-          isRateLimited: true,
-          retryAfter: rateLimitInfo.retryAfter,
-          limit: rateLimitInfo.limit,
-          remaining: rateLimitInfo.remaining,
-          message: "You've exceeded the star processing rate limit. Please wait before trying again.",
-        });
+      if (isRateLimited) {
         setProcessingStars(false);
         return;
-      }
-
-      if (!response.ok) {
-        throw new Error('Failed to process starred repositories');
       }
 
       // After triggering, immediately poll status
@@ -144,21 +84,11 @@ export function useGithubStars() {
       console.error("Error processing starred repositories:", error);
       setProcessingStars(false);
     }
-  }, [session, pollJobStatus]);
-
-  useEffect(() => {
-    // Poll job status every 3 seconds if processing
-    if (processingStars) {
-      const interval = setInterval(() => {
-        pollJobStatus();
-      }, 3000);
-      return () => clearInterval(interval);
-    }
-  }, [processingStars, pollJobStatus]);
+  }, [session, pollJobStatus, rateLimit]);
 
   const startProcessing = async (apiKey?: string) => {
     // Step 1: check if the user already exists in the backend
-    const userExists = await checkUserExists();
+    const userExists = await checkUserExists(session?.accessToken || '');
 
     // Step 2: if the user exists, check for any running job
     let jobInfo = { job: null as UserJob | null, is_running: false };
@@ -181,8 +111,8 @@ export function useGithubStars() {
   };
 
   const refreshStars = async (apiKey?: string) => {
-    // Check for existing jobs and either resume or start new
-    const userExists = await checkUserExists();
+    // Always attempt to refresh but avoid starting a duplicate job
+    const userExists = await checkUserExists(session?.accessToken || '');
 
     let jobInfo = { job: null as UserJob | null, is_running: false };
     if (userExists) {
@@ -200,13 +130,14 @@ export function useGithubStars() {
     }
 
     // Start a new job if none is running
-    await processUserStars(apiKey);
+    await processUserStars(apiKey, true);
   };
 
   return {
     processingStars,
     jobStatus,
-    rateLimitError,
+    isRefreshing,
+    rateLimitError: rateLimit.rateLimitError,
     refreshStars,
     startProcessing
   };

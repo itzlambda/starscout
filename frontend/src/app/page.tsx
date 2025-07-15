@@ -2,94 +2,38 @@
 
 import { useSession } from "next-auth/react";
 import { useGithubStars } from "@/hooks/useGithubStars";
-import { ProcessingStatus } from "@/components/github/ProcessingStatus";
-import { SearchInterface } from "@/components/search/SearchInterface";
 import { RateLimitError } from "@/components/search/RateLimitError";
 import { LandingContent } from "@/components/landing/LandingContent";
 import { OnboardingContent } from "@/components/onboarding/OnboardingContent";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { GridBackground } from "@/components/ui/GridBackground";
-import { useEffect, useState, useCallback } from "react";
+import { useState, Suspense, lazy } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Session } from "next-auth"
 import { useBackendHealth } from "@/hooks/useBackendHealth";
 import { MaintenancePage } from "@/components/maintenance/MaintenancePage";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { ErrorBoundary } from "@/components/error/ErrorBoundary";
+import { useGithubStarsCount } from "@/hooks/useSwrApi";
+import { useApiKeyThreshold } from "@/hooks/useAppSettings";
+import { PageSkeleton } from "@/components/layout/PageSkeleton";
 
-const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL;
+// Lazy load large components to improve initial bundle size
+const ProcessingStatus = lazy(() => import("@/components/github/ProcessingStatus").then(module => ({ default: module.ProcessingStatus })));
+const SearchInterface = lazy(() => import("@/components/search/SearchInterface").then(module => ({ default: module.SearchInterface })));
 
 export default function Home() {
   const { data: session }: { data: Session | null } = useSession();
   const { isBackendHealthy } = useBackendHealth();
-  const { processingStars, jobStatus, rateLimitError, refreshStars, startProcessing } = useGithubStars();
-  const [totalStars, setTotalStars] = useState<number>(0);
+  const { processingStars, jobStatus, isRefreshing, rateLimitError, refreshStars, startProcessing } = useGithubStars();
   const [hasStartedProcessing, setHasStartedProcessing] = useState(false);
   const [currentView, setCurrentView] = useState<'home' | 'search'>(hasStartedProcessing ? 'search' : 'home');
-  const [isLoadingStars, setIsLoadingStars] = useState(true);
-  const [apiKeyThreshold, setApiKeyThreshold] = useState(5000); // Default to prevent search being disabled initially
-  const [apiKey, setApiKey] = useState('');
+  const [apiKey, setApiKey] = useLocalStorage('openai_api_key', '');
 
-  useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const response = await fetch(`${BACKEND_API_URL}/settings`);
-        if (response.ok) {
-          const data = await response.json();
-          setApiKeyThreshold(data.api_key_star_threshold);
-        }
-      } catch (error) {
-        console.error('Error fetching settings:', error);
-      }
-    };
-
-    fetchSettings();
-  }, []);
-
-  // Load API key from localStorage on mount
-  useEffect(() => {
-    const savedApiKey = localStorage.getItem('openai_api_key');
-    if (savedApiKey) {
-      setApiKey(savedApiKey);
-    }
-  }, []);
-
-  // Save API key to localStorage whenever it changes
-  useEffect(() => {
-    localStorage.setItem('openai_api_key', apiKey);
-  }, [apiKey]);
-
-  const fetchUserStars = useCallback(async () => {
-    if (!session?.accessToken) return;
-
-    setIsLoadingStars(true);
-    try {
-      const response = await fetch('https://api.github.com/user/starred?per_page=1', {
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-        }
-      });
-
-      if (response.ok) {
-        const linkHeader = response.headers.get('Link');
-        if (linkHeader) {
-          const match = linkHeader.match(/&page=(\d+)>; rel="last"/);
-          if (match) {
-            setTotalStars(parseInt(match[1]));
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching user stars:', error);
-    } finally {
-      setIsLoadingStars(false);
-    }
-  }, [session?.accessToken]);
-
-  useEffect(() => {
-    if (session?.accessToken) {
-      fetchUserStars();
-    }
-  }, [session?.accessToken, fetchUserStars]);
+  // Use SWR for caching API responses
+  const { totalStars, isLoadingStars } = useGithubStarsCount(session?.accessToken);
+  const { apiKeyThreshold } = useApiKeyThreshold();
 
 
   const handleStartProcessing = () => {
@@ -125,50 +69,53 @@ export default function Home() {
   }
 
   if (isLoadingStars) {
-    return (
-      <div className="min-h-screen flex flex-col">
-        <Navbar currentView={currentView} onNavigate={handleNavigation} totalStars={0} />
-        <main className="flex-1 flex flex-col items-center justify-center bg-gradient-to-b from-background via-background/95 to-background/90 px-4 pt-24 pb-4">
-          <GridBackground className="max-w-4/5">
-            <div className="space-y-8">
-              <Skeleton className="h-[400px] w-full rounded-xl" />
-            </div>
-          </GridBackground>
-        </main>
-        <Footer />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Navbar currentView={currentView} onNavigate={handleNavigation} totalStars={totalStars} />
+      <ErrorBoundary>
+        <Navbar currentView={currentView} onNavigate={handleNavigation} totalStars={totalStars} />
+      </ErrorBoundary>
       <main className="flex-1 flex flex-col items-center justify-center bg-gradient-to-b from-background via-background/95 to-background/90 px-4 pt-24 pb-4">
         <GridBackground className="max-w-4xl">
           <div className="space-y-8">
             {currentView === 'home' ? (
-              <OnboardingContent
-                onStartProcessing={handleStartProcessing}
-                apiKeyThreshold={apiKeyThreshold}
-              />
+              <ErrorBoundary>
+                <OnboardingContent
+                  onStartProcessing={handleStartProcessing}
+                  apiKeyThreshold={apiKeyThreshold}
+                />
+              </ErrorBoundary>
             ) : rateLimitError ? (
-              <RateLimitError
-                error={rateLimitError}
-                onApiKeyClick={() => {
-                  // Navigate to search view where API key input is available
-                  setCurrentView('search');
-                }}
-              />
+              <ErrorBoundary>
+                <RateLimitError
+                  error={rateLimitError}
+                  onApiKeyClick={() => {
+                    // Navigate to search view where API key input is available
+                    setCurrentView('search');
+                  }}
+                />
+              </ErrorBoundary>
             ) : processingStars ? (
-              <ProcessingStatus jobStatus={jobStatus} />
+              <ErrorBoundary>
+                <Suspense fallback={<Skeleton className="h-[300px] w-full rounded-xl" />}>
+                  <ProcessingStatus jobStatus={jobStatus} />
+                </Suspense>
+              </ErrorBoundary>
             ) : (
-              <SearchInterface
-                onRefreshStars={refreshStars}
-                totalStars={totalStars}
-                apiKeyThreshold={apiKeyThreshold}
-                apiKey={apiKey}
-                onApiKeyChange={setApiKey}
-              />
+              <ErrorBoundary>
+                <Suspense fallback={<Skeleton className="h-[600px] w-full rounded-xl" />}>
+                  <SearchInterface
+                    onRefreshStars={refreshStars}
+                    totalStars={totalStars}
+                    apiKeyThreshold={apiKeyThreshold}
+                    apiKey={apiKey}
+                    onApiKeyChange={setApiKey}
+                    isRefreshing={isRefreshing}
+                  />
+                </Suspense>
+              </ErrorBoundary>
             )}
           </div>
         </GridBackground>

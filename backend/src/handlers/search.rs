@@ -45,7 +45,6 @@ pub struct SearchResponse {
 async fn handle_semantic_search(
     app_state: AppState,
     params: SearchQuery,
-    user_login: &str,
     headers: HeaderMap,
     scope: SearchScope,
 ) -> Response {
@@ -78,13 +77,7 @@ async fn handle_semantic_search(
         app_state.database.clone(),
     );
 
-    tracing::info!(
-        "Performing semantic search for user: {} with query: '{}', top_k: {} (scope: {:?})",
-        user_login,
-        query,
-        top_k,
-        scope
-    );
+    tracing::info!(query, top_k, "Performing semantic search",);
 
     // Perform semantic search
     match repo_manager
@@ -107,10 +100,8 @@ async fn handle_semantic_search(
             };
 
             tracing::info!(
-                "Semantic search completed for user: {} - found {} results (scope: {:?})",
-                user_login,
+                "Semantic search completed - found {} results",
                 response.total_count,
-                scope
             );
 
             success(json!({
@@ -120,19 +111,14 @@ async fn handle_semantic_search(
             }))
         }
         Err(e) => {
-            tracing::error!(
-                "Semantic search failed for user {}: {:?} (scope: {:?})",
-                user_login,
-                e,
-                scope
-            );
-            internal_error(format!("Search failed: {e}"))
+            tracing::error!("Semantic search failed: {}", e);
+            internal_error(format!("{e}"))
         }
     }
 }
 
 /// GET /search?query=...&top_k=... - Perform semantic search on repositories
-#[instrument(skip_all, fields(user = user.login))]
+#[instrument(skip_all, fields(user = user.login, id = user.id.0))]
 pub async fn semantic_search_handler(
     State(app_state): State<AppState>,
     Query(params): Query<SearchQuery>,
@@ -142,7 +128,6 @@ pub async fn semantic_search_handler(
     handle_semantic_search(
         app_state,
         params,
-        &user.login,
         headers,
         SearchScope::Starred {
             user_id: user.id.0.into(),
@@ -152,12 +137,12 @@ pub async fn semantic_search_handler(
 }
 
 /// GET /search/global?query=...&top_k=... - Perform global semantic search across all repositories
-#[instrument(skip_all, fields(user = user.login))]
+#[instrument(skip_all, fields(user = user.login, id = user.id.0))]
 pub async fn semantic_search_global_handler(
     State(app_state): State<AppState>,
     Query(params): Query<SearchQuery>,
     AuthenticatedContext { user, .. }: AuthenticatedContext,
     headers: HeaderMap,
 ) -> Response {
-    handle_semantic_search(app_state, params, &user.login, headers, SearchScope::Global).await
+    handle_semantic_search(app_state, params, headers, SearchScope::Global).await
 }
