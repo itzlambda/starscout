@@ -15,7 +15,8 @@ import { useBackendHealth } from "@/hooks/useBackendHealth";
 import { MaintenancePage } from "@/components/maintenance/MaintenancePage";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { ErrorBoundary } from "@/components/error/ErrorBoundary";
-import { useSettings, useGithubStarsCount } from "@/hooks/useSwrApi";
+import { useGithubStarsCount } from "@/hooks/useSwrApi";
+import { useApiKeyThreshold } from "@/hooks/useAppSettings";
 
 // Lazy load large components to improve initial bundle size
 const ProcessingStatus = lazy(() => import("@/components/github/ProcessingStatus").then(module => ({ default: module.ProcessingStatus })));
@@ -30,11 +31,8 @@ export default function Home() {
   const [apiKey, setApiKey] = useLocalStorage('openai_api_key', '');
 
   // Use SWR for caching API responses
-  const { settings } = useSettings();
   const { totalStars, isLoadingStars } = useGithubStarsCount(session?.accessToken);
-
-  // Get API key threshold from settings with fallback
-  const apiKeyThreshold = settings?.api_key_star_threshold ?? 5000;
+  const { apiKeyThreshold } = useApiKeyThreshold();
 
 
   const handleStartProcessing = () => {
