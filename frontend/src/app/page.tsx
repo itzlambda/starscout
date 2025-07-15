@@ -17,6 +17,7 @@ import { useBackendHealth } from "@/hooks/useBackendHealth";
 import { MaintenancePage } from "@/components/maintenance/MaintenancePage";
 import { apiClient } from "@/lib/api-client";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { ErrorBoundary } from "@/components/error/ErrorBoundary";
 
 export default function Home() {
   const { data: session }: { data: Session | null } = useSession();
@@ -126,33 +127,43 @@ export default function Home() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Navbar currentView={currentView} onNavigate={handleNavigation} totalStars={totalStars} />
+      <ErrorBoundary>
+        <Navbar currentView={currentView} onNavigate={handleNavigation} totalStars={totalStars} />
+      </ErrorBoundary>
       <main className="flex-1 flex flex-col items-center justify-center bg-gradient-to-b from-background via-background/95 to-background/90 px-4 pt-24 pb-4">
         <GridBackground className="max-w-4xl">
           <div className="space-y-8">
             {currentView === 'home' ? (
-              <OnboardingContent
-                onStartProcessing={handleStartProcessing}
-                apiKeyThreshold={apiKeyThreshold}
-              />
+              <ErrorBoundary>
+                <OnboardingContent
+                  onStartProcessing={handleStartProcessing}
+                  apiKeyThreshold={apiKeyThreshold}
+                />
+              </ErrorBoundary>
             ) : rateLimitError ? (
-              <RateLimitError
-                error={rateLimitError}
-                onApiKeyClick={() => {
-                  // Navigate to search view where API key input is available
-                  setCurrentView('search');
-                }}
-              />
+              <ErrorBoundary>
+                <RateLimitError
+                  error={rateLimitError}
+                  onApiKeyClick={() => {
+                    // Navigate to search view where API key input is available
+                    setCurrentView('search');
+                  }}
+                />
+              </ErrorBoundary>
             ) : processingStars ? (
-              <ProcessingStatus jobStatus={jobStatus} isRefreshing={isRefreshing} />
+              <ErrorBoundary>
+                <ProcessingStatus jobStatus={jobStatus} isRefreshing={isRefreshing} />
+              </ErrorBoundary>
             ) : (
-              <SearchInterface
-                onRefreshStars={refreshStars}
-                totalStars={totalStars}
-                apiKeyThreshold={apiKeyThreshold}
-                apiKey={apiKey}
-                onApiKeyChange={setApiKey}
-              />
+              <ErrorBoundary>
+                <SearchInterface
+                  onRefreshStars={refreshStars}
+                  totalStars={totalStars}
+                  apiKeyThreshold={apiKeyThreshold}
+                  apiKey={apiKey}
+                  onApiKeyChange={setApiKey}
+                />
+              </ErrorBoundary>
             )}
           </div>
         </GridBackground>
