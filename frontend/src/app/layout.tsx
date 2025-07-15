@@ -4,7 +4,11 @@ import { cn } from "@/lib/utils";
 import { Providers } from "@/components/providers";
 import { generateBaseMetadata } from "@/lib/metadata";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({
+  subsets: ["latin"],
+  display: 'swap',
+  preload: true,
+});
 
 // Generate metadata server-side only to avoid including in client bundle
 export function generateMetadata() {
