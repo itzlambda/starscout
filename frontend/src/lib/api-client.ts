@@ -1,4 +1,5 @@
 import { parseRateLimitHeaders } from './utils';
+import { createBackendHeaders, createPublicHeaders } from './headers';
 import type { UserJob } from '@/types/github';
 
 interface RequestOptions {
@@ -28,8 +29,7 @@ class ApiClient {
     const response = await fetch(url, {
       method: options.method || 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
+        ...createPublicHeaders(),
         ...options.headers,
       },
       body: options.body,
@@ -55,17 +55,7 @@ class ApiClient {
   }
 
   private createHeaders(options: ApiOptions = {}): Record<string, string> {
-    const headers: Record<string, string> = {};
-    
-    if (options.accessToken) {
-      headers.Authorization = `Bearer ${options.accessToken}`;
-    }
-    
-    if (options.apiKey) {
-      headers.api_key = options.apiKey;
-    }
-    
-    return headers;
+    return createBackendHeaders(options.accessToken, options.apiKey);
   }
 
   async checkUserExists(accessToken: string): Promise<{ user_exists: boolean }> {

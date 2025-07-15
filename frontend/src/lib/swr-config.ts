@@ -1,5 +1,6 @@
 import { SWRConfiguration } from 'swr';
 import { apiClient } from './api-client';
+import { createGitHubHeaders } from './headers';
 
 // Default SWR configuration
 export const swrConfig: SWRConfiguration = {
@@ -40,9 +41,7 @@ export const apiFetcher = {
   // GitHub user stars count - cache for 2 minutes
   githubStars: async (token: string) => {
     const response = await fetch('https://api.github.com/user/starred?per_page=1', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      }
+      headers: createGitHubHeaders(token),
     });
 
     if (!response.ok) {
