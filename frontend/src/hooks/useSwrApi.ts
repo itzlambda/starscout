@@ -46,7 +46,9 @@ export function useHealthCheck(enabled = true) {
 
   return {
     healthData: data,
-    isBackendHealthy: data?.status === 'healthy',
+    // During loading, assume healthy (don't show maintenance page)
+    // Only show as unhealthy if we have an error or explicit unhealthy status
+    isBackendHealthy: isLoading ? true : (error ? false : data?.status === 'healthy'),
     isLoadingHealth: isLoading,
     healthError: error,
     recheckHealth: mutate,
