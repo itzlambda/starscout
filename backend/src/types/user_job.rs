@@ -7,7 +7,7 @@ use sqlx::{FromRow, types::Decimal};
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct UserJob {
     /// Job ID (SERIAL in database, auto-generated)
-    pub id: Option<i32>,
+    pub id: i32,
     /// GitHub user ID
     pub user_id: Decimal,
     /// Job status (pending, processing, completed, failed)
@@ -19,29 +19,14 @@ pub struct UserJob {
     /// Number of repositories that failed processing
     pub failed_repos: i32,
     /// Job creation timestamp
-    pub created_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
     /// Job last update timestamp
-    pub updated_at: Option<DateTime<Utc>>,
+    pub updated_at: DateTime<Utc>,
     /// Job completion timestamp
-    pub completed_at: Option<DateTime<Utc>>,
+    pub completed_at: DateTime<Utc>,
 }
 
 impl UserJob {
-    /// Create a new UserJob with default values
-    pub fn new(user_id: Decimal) -> Self {
-        UserJob {
-            id: None,
-            user_id,
-            status: "pending".to_string(),
-            total_repos: 0,
-            processed_repos: 0,
-            failed_repos: 0,
-            created_at: None, // Will be set by database DEFAULT CURRENT_TIMESTAMP
-            updated_at: None, // Will be set by database DEFAULT CURRENT_TIMESTAMP
-            completed_at: None,
-        }
-    }
-
     /// Check if the job is completed (successfully or with failures)
     pub fn is_completed(&self) -> bool {
         self.status == "completed" || self.status == "failed"

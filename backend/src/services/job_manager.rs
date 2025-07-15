@@ -72,7 +72,7 @@ impl JobManager {
         let incomplete_jobs = self.database.get_incomplete_jobs().await?;
 
         if !incomplete_jobs.is_empty() {
-            let job_ids: Vec<i32> = incomplete_jobs.iter().map(|job| job.id.unwrap()).collect();
+            let job_ids: Vec<i32> = incomplete_jobs.iter().map(|job| job.id).collect();
             info!(
                 "Found {} stale jobs, marking them as failed: {:?}",
                 incomplete_jobs.len(),
@@ -111,7 +111,7 @@ impl JobManager {
 
         // Create job record in database
         let job = self.database.create_job(user_id.0.into()).await?;
-        let job_id = job.id.unwrap(); // Safe because database returns the ID
+        let job_id = job.id;
 
         // Clone necessary data for the spawned task
         let repo_manager = self.repo_manager.clone();
