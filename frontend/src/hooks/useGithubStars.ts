@@ -5,6 +5,7 @@ import { UserJob, RateLimitError } from '@/types/github';
 import { useSession } from 'next-auth/react';
 import type { Session } from 'next-auth';
 import { apiClient } from '@/lib/api-client';
+import { useUserExists } from './useUserExists';
 
 export function useGithubStars() {
   const { data: session } = useSession() as { data: Session | null };
@@ -12,19 +13,7 @@ export function useGithubStars() {
   const [jobStatus, setJobStatus] = useState<UserJob | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [rateLimitError, setRateLimitError] = useState<RateLimitError | null>(null);
-
-  // Checks if the authenticated user exists in the backend
-  const checkUserExists = useCallback(async (): Promise<boolean> => {
-    if (!session?.accessToken) return false;
-
-    try {
-      const data = await apiClient.checkUserExists(session.accessToken);
-      return Boolean(data.user_exists);
-    } catch (error) {
-      console.error('Error checking if user exists:', error);
-      return false;
-    }
-  }, [session]);
+  const { checkUserExists } = useUserExists();
 
   // Polls the /jobs/status endpoint for the current user's job
   const pollJobStatus = useCallback(async () => {
@@ -102,7 +91,7 @@ export function useGithubStars() {
 
   const startProcessing = async (apiKey?: string) => {
     // Step 1: check if the user already exists in the backend
-    const userExists = await checkUserExists();
+    const userExists = await checkUserExists(session?.accessToken || '');
 
     // Step 2: if the user exists, check for any running job
     let jobInfo = { job: null as UserJob | null, is_running: false };
@@ -132,7 +121,7 @@ export function useGithubStars() {
 
   const refreshStars = async (apiKey?: string) => {
     // Always attempt to refresh but avoid starting a duplicate job
-    const userExists = await checkUserExists();
+    const userExists = await checkUserExists(session?.accessToken || '');
 
     let jobInfo = { job: null as UserJob | null, is_running: false };
     if (userExists) {

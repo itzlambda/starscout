@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { Octokit } from 'octokit';
 import { Info, RefreshCw } from 'lucide-react';
@@ -13,6 +13,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ApiKeyInput, ApiKeyInputRef } from './ApiKeyInput';
 import { apiClient } from '@/lib/api-client';
+import { useUserExists } from '@/hooks/useUserExists';
 
 interface SearchInterfaceProps {
   onRefreshStars: (apiKey?: string) => void;
@@ -36,22 +37,12 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
   const [octokit] = useState<Octokit | null>(() =>
     session?.accessToken ? new Octokit({ auth: session.accessToken }) : null
   );
-
-  const checkUserExists = useCallback(async () => {
-    if (!session?.accessToken) return false;
-    try {
-      const data = await apiClient.checkUserExists(session.accessToken);
-      return Boolean(data.user_exists);
-    } catch (error) {
-      console.error('Error checking user existence:', error);
-      return false;
-    }
-  }, [session?.accessToken]);
+  const { checkUserExists } = useUserExists();
 
   useEffect(() => {
     const initializeUser = async () => {
       try {
-        const exists = await checkUserExists();
+        const exists = await checkUserExists(session?.accessToken || '');
         if (!exists) {
           await onRefreshStars(apiKey);
         }
@@ -67,7 +58,7 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
     }
     // Intentionally exclude `onRefreshStars` from dependencies to keep the effect stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.accessToken, checkUserExists, apiKey]);
+  }, [session?.accessToken, apiKey]);
 
   const handleSearch = async (query: string) => {
     if (!octokit || !session?.accessToken) return;
