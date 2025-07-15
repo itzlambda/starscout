@@ -16,6 +16,7 @@ import type { Session } from "next-auth"
 import { useBackendHealth } from "@/hooks/useBackendHealth";
 import { MaintenancePage } from "@/components/maintenance/MaintenancePage";
 import { apiClient } from "@/lib/api-client";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
 
 export default function Home() {
   const { data: session }: { data: Session | null } = useSession();
@@ -26,7 +27,7 @@ export default function Home() {
   const [currentView, setCurrentView] = useState<'home' | 'search'>(hasStartedProcessing ? 'search' : 'home');
   const [isLoadingStars, setIsLoadingStars] = useState(true);
   const [apiKeyThreshold, setApiKeyThreshold] = useState(5000); // Default to prevent search being disabled initially
-  const [apiKey, setApiKey] = useState('');
+  const [apiKey, setApiKey] = useLocalStorage('openai_api_key', '');
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -40,19 +41,6 @@ export default function Home() {
 
     fetchSettings();
   }, []);
-
-  // Load API key from localStorage on mount
-  useEffect(() => {
-    const savedApiKey = localStorage.getItem('openai_api_key');
-    if (savedApiKey) {
-      setApiKey(savedApiKey);
-    }
-  }, []);
-
-  // Save API key to localStorage whenever it changes
-  useEffect(() => {
-    localStorage.setItem('openai_api_key', apiKey);
-  }, [apiKey]);
 
   const fetchUserStars = useCallback(async () => {
     if (!session?.accessToken) return;
