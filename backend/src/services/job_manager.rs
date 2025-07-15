@@ -7,7 +7,7 @@ use tokio::task::JoinHandle;
 use tracing::{error, info, warn};
 
 use crate::db::Database;
-use crate::github::GitHubClient;
+use crate::github::{GitHubClient, UserId};
 use crate::services::{SemanticSearchManager, SemanticSearchManagerError};
 use crate::types::UserJob;
 use crate::types::repository::Repository;
@@ -31,9 +31,9 @@ impl Repository {
 #[derive(Debug, thiserror::Error)]
 pub enum JobError {
     #[error("Job already running for user {user_id}")]
-    JobAlreadyRunning { user_id: i64 },
+    JobAlreadyRunning { user_id: u64 },
     #[error("Job not found for user {user_id}")]
-    JobNotFound { user_id: i64 },
+    JobNotFound { user_id: u64 },
     #[error("Database error: {0}")]
     DatabaseError(#[from] sqlx::Error),
     #[error("Repository manager error: {0}")]
@@ -50,7 +50,7 @@ pub enum JobError {
 pub struct JobManager {
     repo_manager: SemanticSearchManager,
     database: Database,
-    active_jobs: Arc<DashMap<i64, (i32, JoinHandle<()>)>>, // (user_id, (job_id, handle))
+    active_jobs: Arc<DashMap<UserId, (i32, JoinHandle<()>)>>, // (user_id, (job_id, handle))
 }
 
 impl JobManager {
@@ -72,7 +72,7 @@ impl JobManager {
         let incomplete_jobs = self.database.get_incomplete_jobs().await?;
 
         if !incomplete_jobs.is_empty() {
-            let job_ids: Vec<i32> = incomplete_jobs.iter().map(|job| job.id.unwrap()).collect();
+            let job_ids: Vec<i32> = incomplete_jobs.iter().map(|job| job.id).collect();
             info!(
                 "Found {} stale jobs, marking them as failed: {:?}",
                 incomplete_jobs.len(),
@@ -97,21 +97,21 @@ impl JobManager {
     /// Returns the job ID if successful, or an error if a job is already running for this user
     pub async fn start_job(
         &self,
-        user_id: i64,
+        user_id: UserId,
         api_key: &str,
         github_client: &GitHubClient,
         starred_repos_count: usize,
     ) -> Result<i32, JobError> {
         // Check if job is already running in memory
         if self.active_jobs.contains_key(&user_id) {
-            return Err(JobError::JobAlreadyRunning { user_id });
+            return Err(JobError::JobAlreadyRunning { user_id: user_id.0 });
         }
 
         info!("Starting background job for user: {}", user_id);
 
         // Create job record in database
-        let job = self.database.create_job(user_id.into()).await?;
-        let job_id = job.id.unwrap(); // Safe because database returns the ID
+        let job = self.database.create_job(user_id.0.into()).await?;
+        let job_id = job.id;
 
         // Clone necessary data for the spawned task
         let repo_manager = self.repo_manager.clone();
@@ -155,7 +155,7 @@ impl JobManager {
 
     /// Internal method to process a user's starred repositories
     async fn process_user_stars(
-        user_id: i64,
+        user_id: UserId,
         job_id: i32,
         repo_manager: SemanticSearchManager,
         github_client: &GitHubClient,
@@ -194,7 +194,7 @@ impl JobManager {
         // Progress is now updated incrementally inside generate_and_store_embeddings
         match repo_manager
             .generate_and_store_embeddings(
-                user_id.try_into().unwrap(),
+                user_id.0,
                 &api_key,
                 github_client,
                 starred_repos.clone(),
@@ -234,7 +234,7 @@ impl JobManager {
             let github_username = github_user.login;
 
             database
-                .update_user_stars(user_id.into(), &repo_ids, &github_username)
+                .update_user_stars(user_id.0.into(), &repo_ids, &github_username)
                 .await?;
 
             info!(
@@ -251,13 +251,13 @@ impl JobManager {
     }
 
     /// List all currently active job user IDs
-    pub fn list_active_jobs(&self) -> Vec<i64> {
+    pub fn list_active_jobs(&self) -> Vec<UserId> {
         self.active_jobs.iter().map(|entry| *entry.key()).collect()
     }
 
     /// Stop a running job for a specific user
     /// Returns an error if no job is found for the user
-    pub async fn stop_job(&self, user_id: i64) -> Result<(), JobError> {
+    pub async fn stop_job(&self, user_id: UserId) -> Result<(), JobError> {
         if let Some((_, (job_id, handle))) = self.active_jobs.remove(&user_id) {
             info!("Stopping job for user: {} (job_id: {})", user_id, job_id);
             handle.abort();
@@ -283,12 +283,12 @@ impl JobManager {
 
             Ok(())
         } else {
-            Err(JobError::JobNotFound { user_id })
+            Err(JobError::JobNotFound { user_id: user_id.0 })
         }
     }
 
     /// Check if a job is currently running for a user
-    pub fn is_job_running(&self, user_id: i64) -> bool {
+    pub fn is_job_running(&self, user_id: UserId) -> bool {
         self.active_jobs.contains_key(&user_id)
     }
 
@@ -303,7 +303,7 @@ impl JobManager {
     }
 
     /// Get latest job for a user
-    pub async fn get_latest_job(&self, user_id: i64) -> Result<Option<UserJob>, JobError> {
-        Ok(self.database.get_latest_job(user_id.into()).await?)
+    pub async fn get_latest_job(&self, user_id: UserId) -> Result<Option<UserJob>, JobError> {
+        Ok(self.database.get_latest_job(user_id.0.into()).await?)
     }
 }

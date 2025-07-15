@@ -27,12 +27,10 @@ export function useGithubStars() {
 
       if (!data.job || data.job.status === 'completed' || data.job.status === 'failed') {
         setProcessingStars(false);
-        setIsRefreshing(false);
       }
     } catch (error) {
       console.error("Error polling job status:", error);
       setProcessingStars(false);
-      setIsRefreshing(false);
     }
   }, [session]);
 
@@ -60,7 +58,7 @@ export function useGithubStars() {
   }, [session]);
 
   // Triggers the backend to start processing stars
-  const processUserStars = useCallback(async (forceRefresh = false, apiKey?: string) => {
+  const processUserStars = useCallback(async (apiKey?: string, forceRefresh = false) => {
     if (!session?.accessToken) return;
 
     try {
@@ -77,7 +75,6 @@ export function useGithubStars() {
 
       if (isRateLimited) {
         setProcessingStars(false);
-        setIsRefreshing(false);
         return;
       }
 
@@ -86,7 +83,6 @@ export function useGithubStars() {
     } catch (error) {
       console.error("Error processing starred repositories:", error);
       setProcessingStars(false);
-      setIsRefreshing(false);
     }
   }, [session, pollJobStatus, rateLimit]);
 
@@ -110,14 +106,8 @@ export function useGithubStars() {
       return;
     }
 
-    if (job && job.status === 'failed') {
-      // Previous job failed – allow user to retry by forcing refresh
-      processUserStars(true, apiKey);
-      return;
-    }
-
     // If the user doesn't exist or no job is running, start a new job
-    processUserStars(false, apiKey);
+    await processUserStars(apiKey);
   };
 
   const refreshStars = async (apiKey?: string) => {
@@ -139,8 +129,8 @@ export function useGithubStars() {
       return;
     }
 
-    // Force refresh to reprocess repositories or start a new job if none is running
-    processUserStars(true, apiKey);
+    // Start a new job if none is running
+    await processUserStars(apiKey, true);
   };
 
   return {

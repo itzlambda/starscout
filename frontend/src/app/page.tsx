@@ -100,7 +100,7 @@ export default function Home() {
             ) : processingStars ? (
               <ErrorBoundary>
                 <Suspense fallback={<Skeleton className="h-[300px] w-full rounded-xl" />}>
-                  <ProcessingStatus jobStatus={jobStatus} isRefreshing={isRefreshing} />
+                  <ProcessingStatus jobStatus={jobStatus} />
                 </Suspense>
               </ErrorBoundary>
             ) : (
