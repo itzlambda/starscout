@@ -7,7 +7,7 @@ import { Info, RefreshCw } from 'lucide-react';
 import { SearchInput } from './SearchInput';
 import { SearchResults } from './SearchResults';
 import { RateLimitError } from './RateLimitError';
-import type { Repository, SearchResult, RateLimitError as RateLimitErrorType } from '@/types/github';
+import type { Repository, SearchResult } from '@/types/github';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -16,6 +16,7 @@ import { apiClient } from '@/lib/api-client';
 import { useUserExists } from '@/hooks/useUserExists';
 import { useInitialization } from '@/hooks/useInitialization';
 import { useSearchCache } from '@/hooks/useSearchCache';
+import { useRateLimit } from '@/hooks/useRateLimit';
 
 interface SearchInterfaceProps {
   onRefreshStars: (apiKey?: string) => void;
@@ -30,7 +31,7 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isGlobalSearch, setIsGlobalSearch] = useState(false);
-  const [rateLimitError, setRateLimitError] = useState<RateLimitErrorType | null>(null);
+  const rateLimit = useRateLimit();
   const [searchError, setSearchError] = useState<string | null>(null);
   const apiKeyInputRef = useRef<ApiKeyInputRef>(null);
   const [octokit] = useState<Octokit | null>(() =>
@@ -95,7 +96,7 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
     if (!octokit || !session?.accessToken) return;
 
     setIsLoading(true);
-    setRateLimitError(null);
+    rateLimit.clearRateLimit();
     setSearchError(null);
 
     try {
@@ -106,14 +107,12 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
         apiKey
       );
 
-      if (rateLimitInfo.isRateLimited) {
-        setRateLimitError({
-          isRateLimited: true,
-          retryAfter: rateLimitInfo.retryAfter,
-          limit: rateLimitInfo.limit,
-          remaining: rateLimitInfo.remaining,
-          message: "You've exceeded the search rate limit. Please wait before trying again.",
-        });
+      const isRateLimited = rateLimit.handleRateLimitInfo(
+        rateLimitInfo,
+        "You've exceeded the search rate limit. Please wait before trying again."
+      );
+
+      if (isRateLimited) {
         setRepositories([]); // Clear previous results
         return;
       }
@@ -228,9 +227,9 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
           </div>
         </div>
 
-        {rateLimitError ? (
+        {rateLimit.rateLimitError ? (
           <RateLimitError
-            error={rateLimitError}
+            error={rateLimit.rateLimitError}
             onApiKeyClick={handleApiKeyClick}
           />
         ) : (

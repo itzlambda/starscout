@@ -1,19 +1,20 @@
 "use client";
 
 import { useState, useCallback } from 'react';
-import { UserJob, RateLimitError } from '@/types/github';
+import { UserJob } from '@/types/github';
 import { useSession } from 'next-auth/react';
 import type { Session } from 'next-auth';
 import { apiClient } from '@/lib/api-client';
 import { useUserExists } from './useUserExists';
 import { usePolling } from './usePolling';
+import { useRateLimit } from './useRateLimit';
 
 export function useGithubStars() {
   const { data: session } = useSession() as { data: Session | null };
   const [processingStars, setProcessingStars] = useState(false);
   const [jobStatus, setJobStatus] = useState<UserJob | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [rateLimitError, setRateLimitError] = useState<RateLimitError | null>(null);
+  const rateLimit = useRateLimit();
   const { checkUserExists } = useUserExists();
 
   // Polls the /jobs/status endpoint for the current user's job
@@ -65,18 +66,16 @@ export function useGithubStars() {
     try {
       setProcessingStars(true);
       setIsRefreshing(forceRefresh);
-      setRateLimitError(null);
+      rateLimit.clearRateLimit();
 
       const { rateLimitInfo } = await apiClient.processUserStars(session.accessToken, apiKey);
 
-      if (rateLimitInfo.isRateLimited) {
-        setRateLimitError({
-          isRateLimited: true,
-          retryAfter: rateLimitInfo.retryAfter,
-          limit: rateLimitInfo.limit,
-          remaining: rateLimitInfo.remaining,
-          message: "You've exceeded the star processing rate limit. Please wait before trying again.",
-        });
+      const isRateLimited = rateLimit.handleRateLimitInfo(
+        rateLimitInfo,
+        "You've exceeded the star processing rate limit. Please wait before trying again."
+      );
+
+      if (isRateLimited) {
         setProcessingStars(false);
         setIsRefreshing(false);
         return;
@@ -89,7 +88,7 @@ export function useGithubStars() {
       setProcessingStars(false);
       setIsRefreshing(false);
     }
-  }, [session, pollJobStatus]);
+  }, [session, pollJobStatus, rateLimit]);
 
   const startProcessing = async (apiKey?: string) => {
     // Step 1: check if the user already exists in the backend
@@ -148,7 +147,7 @@ export function useGithubStars() {
     processingStars,
     jobStatus,
     isRefreshing,
-    rateLimitError,
+    rateLimitError: rateLimit.rateLimitError,
     refreshStars,
     startProcessing
   };
