@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
-import { Octokit } from 'octokit';
 import { Info, RefreshCw } from 'lucide-react';
 import { SearchInput } from './SearchInput';
 import { SearchResults } from './SearchResults';
@@ -34,9 +33,6 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
   const rateLimit = useRateLimit();
   const [searchError, setSearchError] = useState<string | null>(null);
   const apiKeyInputRef = useRef<ApiKeyInputRef>(null);
-  const [octokit] = useState<Octokit | null>(() =>
-    session?.accessToken ? new Octokit({ auth: session.accessToken }) : null
-  );
   const { checkUserExists } = useUserExists();
   const { hasInitializationBeenAttempted, markInitializationAttempted } = useInitialization();
   const searchCache = useSearchCache();
@@ -93,7 +89,7 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
   }, [searchCache, onRefreshStars]);
 
   const handleSearch = async (query: string) => {
-    if (!octokit || !session?.accessToken) return;
+    if (!session?.accessToken) return;
 
     setIsLoading(true);
     rateLimit.clearRateLimit();
