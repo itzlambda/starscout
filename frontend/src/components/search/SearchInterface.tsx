@@ -33,6 +33,7 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
   const [isLoading, setIsLoading] = useState(false);
   const [isGlobalSearch, setIsGlobalSearch] = useState(false);
   const [rateLimitError, setRateLimitError] = useState<RateLimitErrorType | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const apiKeyInputRef = useRef<ApiKeyInputRef>(null);
   const [octokit] = useState<Octokit | null>(() =>
     session?.accessToken ? new Octokit({ auth: session.accessToken }) : null
@@ -65,6 +66,7 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
 
     setIsLoading(true);
     setRateLimitError(null);
+    setSearchError(null);
 
     try {
       const { data, rateLimitInfo } = await apiClient.search(
@@ -105,7 +107,6 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
           topics: repo.topics || [],
           owner: {
             login: ownerLogin,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             avatarUrl: typeof repo.owner === 'object' && repo.owner?.avatarUrl
               ? repo.owner.avatarUrl
               : `https://github.com/${ownerLogin}.png`,
@@ -114,6 +115,25 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
       }));
     } catch (error) {
       console.error("Error searching repositories:", error);
+      setRepositories([]); // Clear previous results
+
+      // Extract user-friendly error message
+      let errorMessage = 'An unexpected error occurred while searching. Please try again.';
+      if (error instanceof Error) {
+        const message = error.message.toLowerCase();
+        if (message.includes('incorrect api key') || message.includes('invalid_api_key')) {
+          errorMessage = 'Invalid OpenAI API key. Please check your API key and try again.';
+        } else if (message.includes('rate limit') || message.includes('too many requests')) {
+          errorMessage = 'Too many requests. Please wait a moment and try again.';
+        } else if (message.includes('network') || message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your connection and try again.';
+        } else {
+          // For other errors, show a generic message but log the full error
+          errorMessage = 'Search failed. Please try again or contact support if the issue persists.';
+        }
+      }
+
+      setSearchError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -199,6 +219,8 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
             repositories={repositories}
             isLoading={isLoading}
             emptyMessage="Enter a search query to find repositories"
+            error={searchError}
+            onApiKeyClick={handleApiKeyClick}
           />
         )}
       </>

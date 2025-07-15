@@ -38,7 +38,16 @@ class ApiClient {
     const rateLimitInfo = parseRateLimitHeaders(response);
 
     if (!response.ok) {
-      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+      // Try to parse error message from response body
+      let errorMessage: string;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.message || errorData.error || `${response.status} ${response.statusText}`;
+      } catch (parseError) {
+        // If parsing fails, fall back to status text
+        errorMessage = `API request failed: ${response.status} ${response.statusText}`;
+      }
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();
