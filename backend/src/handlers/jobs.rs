@@ -19,26 +19,25 @@ pub async fn job_status_handler(
 ) -> impl IntoResponse {
     tracing::debug!("Job status requested by user: {}", user.login);
 
-    let user_id = user.id.0 as i64;
-    let is_running = app_state.job_manager.is_job_running(user_id);
+    let is_running = app_state.job_manager.is_job_running(user.id);
 
-    // Get the latest job for this user
-    match app_state.job_manager.get_latest_job(user_id).await {
+    // Try to get the latest job for this user
+    match app_state.job_manager.get_latest_job(user.id).await {
         Ok(Some(job)) => success(json!({
             "job": job,
             "is_running": is_running,
-            "user_id": user_id,
+            "user_id": user.id,
             "total_active_jobs": app_state.job_manager.active_job_count()
         })),
         Ok(None) => success(json!({
             "job": null,
             "is_running": is_running,
-            "user_id": user_id,
+            "user_id": user.id,
             "total_active_jobs": app_state.job_manager.active_job_count(),
             "message": "No jobs found for user"
         })),
         Err(e) => {
-            tracing::error!("Failed to get latest job for user {}: {}", user_id, e);
+            tracing::error!("Failed to get latest job for user {}: {}", user.id, e);
             internal_error("Failed to get job status")
         }
     }

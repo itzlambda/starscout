@@ -12,7 +12,6 @@ export function useGithubStars() {
   const { data: session } = useSession() as { data: Session | null };
   const [processingStars, setProcessingStars] = useState(false);
   const [jobStatus, setJobStatus] = useState<UserJob | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [rateLimitError, setRateLimitError] = useState<RateLimitError | null>(null);
 
   // Checks if the authenticated user exists in the backend
@@ -64,12 +63,10 @@ export function useGithubStars() {
 
       if (!data.job || data.job.status === 'completed' || data.job.status === 'failed') {
         setProcessingStars(false);
-        setIsRefreshing(false);
       }
     } catch (error) {
       console.error("Error polling job status:", error);
       setProcessingStars(false);
-      setIsRefreshing(false);
     }
   }, [session]);
 
@@ -100,12 +97,11 @@ export function useGithubStars() {
   }, [session]);
 
   // Triggers the backend to start processing stars
-  const processUserStars = useCallback(async (forceRefresh = false, apiKey?: string) => {
+  const processUserStars = useCallback(async (apiKey?: string) => {
     if (!session?.accessToken) return;
 
     try {
       setProcessingStars(true);
-      setIsRefreshing(forceRefresh);
       setRateLimitError(null);
 
       const headers: Record<string, string> = {
@@ -135,7 +131,6 @@ export function useGithubStars() {
           message: "You've exceeded the star processing rate limit. Please wait before trying again.",
         });
         setProcessingStars(false);
-        setIsRefreshing(false);
         return;
       }
 
@@ -148,7 +143,6 @@ export function useGithubStars() {
     } catch (error) {
       console.error("Error processing starred repositories:", error);
       setProcessingStars(false);
-      setIsRefreshing(false);
     }
   }, [session, pollJobStatus]);
 
@@ -182,18 +176,12 @@ export function useGithubStars() {
       return;
     }
 
-    if (job && job.status === 'failed') {
-      // Previous job failed – allow user to retry by forcing refresh
-      processUserStars(true, apiKey);
-      return;
-    }
-
     // If the user doesn't exist or no job is running, start a new job
-    processUserStars(false, apiKey);
+    await processUserStars(apiKey);
   };
 
   const refreshStars = async (apiKey?: string) => {
-    // Always attempt to refresh but avoid starting a duplicate job
+    // Check for existing jobs and either resume or start new
     const userExists = await checkUserExists();
 
     let jobInfo = { job: null as UserJob | null, is_running: false };
@@ -211,14 +199,13 @@ export function useGithubStars() {
       return;
     }
 
-    // Force refresh to reprocess repositories or start a new job if none is running
-    processUserStars(true, apiKey);
+    // Start a new job if none is running
+    await processUserStars(apiKey);
   };
 
   return {
     processingStars,
     jobStatus,
-    isRefreshing,
     rateLimitError,
     refreshStars,
     startProcessing
