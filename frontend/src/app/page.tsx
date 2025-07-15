@@ -17,6 +17,7 @@ import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { ErrorBoundary } from "@/components/error/ErrorBoundary";
 import { useGithubStarsCount } from "@/hooks/useSwrApi";
 import { useApiKeyThreshold } from "@/hooks/useAppSettings";
+import { PageSkeleton } from "@/components/layout/PageSkeleton";
 
 // Lazy load large components to improve initial bundle size
 const ProcessingStatus = lazy(() => import("@/components/github/ProcessingStatus").then(module => ({ default: module.ProcessingStatus })));
@@ -68,19 +69,7 @@ export default function Home() {
   }
 
   if (isLoadingStars) {
-    return (
-      <div className="min-h-screen flex flex-col">
-        <Navbar currentView={currentView} onNavigate={handleNavigation} totalStars={0} />
-        <main className="flex-1 flex flex-col items-center justify-center bg-gradient-to-b from-background via-background/95 to-background/90 px-4 pt-24 pb-4">
-          <GridBackground className="max-w-4/5">
-            <div className="space-y-8">
-              <Skeleton className="h-[400px] w-full rounded-xl" />
-            </div>
-          </GridBackground>
-        </main>
-        <Footer />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   return (
@@ -123,6 +112,7 @@ export default function Home() {
                     apiKeyThreshold={apiKeyThreshold}
                     apiKey={apiKey}
                     onApiKeyChange={setApiKey}
+                    isRefreshing={isRefreshing}
                   />
                 </Suspense>
               </ErrorBoundary>

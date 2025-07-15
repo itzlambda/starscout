@@ -1,8 +1,8 @@
 "use client";
 
 import { RepositoryCard } from "@/components/repository/RepositoryCard";
+import { RepositoryListSkeleton } from "@/components/repository/RepositoryCardSkeleton";
 import { Repository } from "@/types/github";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, Key } from "lucide-react";
 
@@ -22,13 +22,7 @@ export function SearchResults({
   onApiKeyClick,
 }: SearchResultsProps) {
   if (isLoading) {
-    return (
-      <div className="space-y-4">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-[180px] w-full rounded-xl" />
-        ))}
-      </div>
-    );
+    return <RepositoryListSkeleton count={3} />;
   }
 
   if (error) {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useId } from 'react';
 import { useSession } from 'next-auth/react';
-import { Info, RefreshCw } from 'lucide-react';
+import { Info, RefreshCw, Loader2 } from 'lucide-react';
 import { SearchInput } from './SearchInput';
 import { SearchResults } from './SearchResults';
 import { RateLimitError } from './RateLimitError';
@@ -23,9 +23,10 @@ interface SearchInterfaceProps {
   apiKeyThreshold: number;
   apiKey: string;
   onApiKeyChange: (value: string) => void;
+  isRefreshing?: boolean;
 }
 
-export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, apiKey, onApiKeyChange }: SearchInterfaceProps) {
+export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, apiKey, onApiKeyChange, isRefreshing = false }: SearchInterfaceProps) {
   const { data: session } = useSession();
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -188,10 +189,17 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
             onClick={() => handleRefreshStars(apiKey)}
             variant="outline"
             className="flex items-center gap-2 h-12 whitespace-nowrap cursor-pointer"
-            aria-label={`Refresh your ${totalStars} starred repositories`}
+            aria-label={`${isRefreshing ? 'Refreshing' : 'Refresh'} your ${totalStars} starred repositories`}
+            disabled={isRefreshing}
           >
-            <RefreshCw className="h-4 w-4" aria-hidden="true" />
-            <span className="sm:block hidden">Refresh Stars</span>
+            {isRefreshing ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+            )}
+            <span className="sm:block hidden">
+              {isRefreshing ? 'Refreshing...' : 'Refresh Stars'}
+            </span>
           </Button>
         </div>
 
