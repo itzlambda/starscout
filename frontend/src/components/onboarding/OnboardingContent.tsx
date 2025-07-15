@@ -89,7 +89,7 @@ export function OnboardingContent({ onStartProcessing, apiKeyThreshold }: Onboar
                 <div>
                   <h3 className="font-medium">Reading Your Stars</h3>
                   <p className="text-sm text-muted-foreground">
-                    We only access your public GitHub stars - the repositories you&apos;ve bookmarked. This is public information that anyone can see on your GitHub profile.
+                    We only access your public GitHub stars - the repositories you&apos;ve starred. This is public information that anyone can see on your GitHub profile.
                   </p>
                 </div>
               </div>
@@ -170,6 +170,30 @@ export function OnboardingContent({ onStartProcessing, apiKeyThreshold }: Onboar
                   <h3 className="font-medium">API Key Requirement</h3>
                   <p className="text-sm text-muted-foreground">
                     To prevent abuse, users with more than {apiKeyThreshold.toLocaleString()} GitHub stars will need to provide their own OpenAI API key.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-4">
+                <div className="rounded-full bg-primary/10 p-2">
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4 text-primary"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-medium">Server-Side Processing</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Since we cache repo embedding vectors, API keys must be sent to our backend server for processing (this can&apos;t be done client-side). We never store any API keys, but we recommend revoking the key once you&apos;ve finished indexing your stars.
                   </p>
                 </div>
               </div>
