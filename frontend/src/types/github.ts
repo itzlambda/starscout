@@ -2,7 +2,7 @@ export interface Repository {
   id: number;
   name: string;
   fullName: string;
-  description: string;
+  description: string | null;
   url: string;
   topics: string[];
   owner: {

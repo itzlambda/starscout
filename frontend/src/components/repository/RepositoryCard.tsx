@@ -3,19 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-
-export interface Repository {
-    id: number;
-    name: string;
-    fullName: string;
-    description: string | null;
-    url: string;
-    topics: string[];
-    owner: {
-        login: string;
-        avatarUrl: string;
-    };
-}
+import { Repository } from "@/types/github";
 
 interface RepositoryCardProps {
     repository: Repository;

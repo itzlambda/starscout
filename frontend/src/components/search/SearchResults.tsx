@@ -1,6 +1,7 @@
 "use client";
 
-import { Repository, RepositoryCard } from "@/components/repository/RepositoryCard";
+import { RepositoryCard } from "@/components/repository/RepositoryCard";
+import { Repository } from "@/types/github";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface SearchResultsProps {
