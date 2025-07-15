@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { Octokit } from 'octokit';
 import { Info, RefreshCw } from 'lucide-react';
@@ -15,6 +15,7 @@ import { ApiKeyInput, ApiKeyInputRef } from './ApiKeyInput';
 import { apiClient } from '@/lib/api-client';
 import { useUserExists } from '@/hooks/useUserExists';
 import { useInitialization } from '@/hooks/useInitialization';
+import { useSearchCache } from '@/hooks/useSearchCache';
 
 interface SearchInterfaceProps {
   onRefreshStars: (apiKey?: string) => void;
@@ -37,6 +38,7 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
   );
   const { checkUserExists } = useUserExists();
   const { hasInitializationBeenAttempted, markInitializationAttempted } = useInitialization();
+  const searchCache = useSearchCache();
 
   useEffect(() => {
     const initializeUser = async () => {
@@ -58,6 +60,36 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
     // Intentionally exclude `onRefreshStars` from dependencies to keep the effect stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.accessToken, apiKey]);
+
+  // Memoized repository transformation function
+  const transformRepositories = useCallback((reposArray: (SearchResult | Repository)[]): Repository[] => {
+    return reposArray.map((item: SearchResult | Repository) => {
+      const repo = 'repository' in item ? item.repository : item;
+      // Handle the backend API response structure
+      const ownerLogin = typeof repo.owner === 'string' ? repo.owner : repo.owner?.login || 'unknown';
+
+      return {
+        id: typeof repo.id === 'string' ? parseInt(repo.id, 10) : repo.id,
+        name: repo.name,
+        fullName: `${ownerLogin}/${repo.name}`,
+        description: repo.description,
+        url: (repo as unknown as { homepage_url?: string }).homepage_url || repo.url || `https://github.com/${ownerLogin}/${repo.name}`,
+        topics: repo.topics || [],
+        owner: {
+          login: ownerLogin,
+          avatarUrl: typeof repo.owner === 'object' && repo.owner?.avatarUrl
+            ? repo.owner.avatarUrl
+            : `https://github.com/${ownerLogin}.png`,
+        },
+      } as Repository;
+    });
+  }, []);
+
+  // Handle star refresh - invalidate cache
+  const handleRefreshStars = useCallback((apiKey?: string) => {
+    searchCache.invalidateAll();
+    onRefreshStars(apiKey);
+  }, [searchCache, onRefreshStars]);
 
   const handleSearch = async (query: string) => {
     if (!octokit || !session?.accessToken) return;
@@ -90,27 +122,16 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
       // Fallback to legacy array for backward compatibility
       const reposArray = Array.isArray(data) ? data : (data as { results?: unknown[] })?.results ?? [];
 
-      setRepositories(reposArray.map((item: SearchResult | Repository) => {
-        const repo = 'repository' in item ? item.repository : item;
-        // Handle the backend API response structure
-        const ownerLogin = typeof repo.owner === 'string' ? repo.owner : repo.owner?.login || 'unknown';
-
-        return {
-          id: typeof repo.id === 'string' ? parseInt(repo.id, 10) : repo.id,
-          name: repo.name,
-          fullName: `${ownerLogin}/${repo.name}`,
-          description: repo.description,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          url: (repo as any).homepage_url || repo.url || `https://github.com/${ownerLogin}/${repo.name}`,
-          topics: repo.topics || [],
-          owner: {
-            login: ownerLogin,
-            avatarUrl: typeof repo.owner === 'object' && repo.owner?.avatarUrl
-              ? repo.owner.avatarUrl
-              : `https://github.com/${ownerLogin}.png`,
-          },
-        } as Repository;
-      }));
+      // Check cache first
+      const cachedResults = searchCache.get(query, isGlobalSearch, data);
+      if (cachedResults) {
+        setRepositories(cachedResults);
+      } else {
+        // Transform and cache the results
+        const transformedRepos = transformRepositories(reposArray);
+        searchCache.set(query, isGlobalSearch, data, transformedRepos);
+        setRepositories(transformedRepos);
+      }
     } catch (error) {
       console.error("Error searching repositories:", error);
       setRepositories([]); // Clear previous results
@@ -159,7 +180,7 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
               />
             </div>
             <Button
-              onClick={() => onRefreshStars(apiKey)}
+              onClick={() => handleRefreshStars(apiKey)}
               variant="outline"
               className="flex items-center gap-2 h-12 whitespace-nowrap cursor-pointer"
             >
