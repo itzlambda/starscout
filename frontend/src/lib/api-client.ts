@@ -43,7 +43,7 @@ class ApiClient {
       try {
         const errorData = await response.json();
         errorMessage = errorData.message || errorData.error || `${response.status} ${response.statusText}`;
-      } catch (parseError) {
+      } catch {
         // If parsing fails, fall back to status text
         errorMessage = `API request failed: ${response.status} ${response.statusText}`;
       }

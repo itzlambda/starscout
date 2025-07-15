@@ -14,6 +14,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { ApiKeyInput, ApiKeyInputRef } from './ApiKeyInput';
 import { apiClient } from '@/lib/api-client';
 import { useUserExists } from '@/hooks/useUserExists';
+import { useInitialization } from '@/hooks/useInitialization';
 
 interface SearchInterfaceProps {
   onRefreshStars: (apiKey?: string) => void;
@@ -22,10 +23,6 @@ interface SearchInterfaceProps {
   apiKey: string;
   onApiKeyChange: (value: string) => void;
 }
-
-// Tracks whether we've already attempted to initialize the user during this browser session.
-// Because it's a module-level variable, it survives component unmount/remount cycles.
-let initializationAttempted = false;
 
 export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, apiKey, onApiKeyChange }: SearchInterfaceProps) {
   const { data: session } = useSession();
@@ -39,6 +36,7 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
     session?.accessToken ? new Octokit({ auth: session.accessToken }) : null
   );
   const { checkUserExists } = useUserExists();
+  const { hasInitializationBeenAttempted, markInitializationAttempted } = useInitialization();
 
   useEffect(() => {
     const initializeUser = async () => {
@@ -53,8 +51,8 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
     };
 
     // Run initialization only once per browser session to avoid infinite retry loops
-    if (session?.accessToken && !initializationAttempted) {
-      initializationAttempted = true;
+    if (session?.accessToken && !hasInitializationBeenAttempted()) {
+      markInitializationAttempted();
       initializeUser();
     }
     // Intentionally exclude `onRefreshStars` from dependencies to keep the effect stable.
