@@ -12,9 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ApiKeyInput, ApiKeyInputRef } from './ApiKeyInput';
-import { parseRateLimitHeaders } from '@/lib/utils';
-
-const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL;
+import { apiClient } from '@/lib/api-client';
 
 interface SearchInterfaceProps {
   onRefreshStars: (apiKey?: string) => void;
@@ -42,15 +40,7 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
   const checkUserExists = useCallback(async () => {
     if (!session?.accessToken) return false;
     try {
-      const response = await fetch(`${BACKEND_API_URL}/user/exists`, {
-        headers: {
-          'Authorization': `Bearer ${session.accessToken}`,
-        },
-      });
-      if (!response.ok) {
-        throw new Error('Failed to check user existence');
-      }
-      const data = await response.json();
+      const data = await apiClient.checkUserExists(session.accessToken);
       return Boolean(data.user_exists);
     } catch (error) {
       console.error('Error checking user existence:', error);
@@ -86,24 +76,12 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
     setRateLimitError(null);
 
     try {
-      const endpoint = isGlobalSearch ? 'search_global' : 'search';
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${session.accessToken}`,
-      };
-
-      if (apiKey) {
-        headers['api_key'] = apiKey;
-      }
-
-      const response = await fetch(`${BACKEND_API_URL}/${endpoint}?query=${encodeURIComponent(query)}`, {
-        method: 'GET',
-        headers,
-      });
-
-      // Parse rate limit headers regardless of response status
-      const rateLimitInfo = parseRateLimitHeaders(response);
+      const { data, rateLimitInfo } = await apiClient.search(
+        query,
+        session.accessToken,
+        isGlobalSearch,
+        apiKey
+      );
 
       if (rateLimitInfo.isRateLimited) {
         setRateLimitError({
@@ -117,15 +95,9 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
         return;
       }
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch search results');
-      }
-
-      const data = await response.json();
-
       // Rust backend returns {results: [{repository, similarity_score}], ...},
       // Fallback to legacy array for backward compatibility
-      const reposArray = Array.isArray(data) ? data : data.results ?? [];
+      const reposArray = Array.isArray(data) ? data : (data as { results?: unknown[] })?.results ?? [];
 
       setRepositories(reposArray.map((item: SearchResult | Repository) => {
         const repo = 'repository' in item ? item.repository : item;

@@ -15,8 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Session } from "next-auth"
 import { useBackendHealth } from "@/hooks/useBackendHealth";
 import { MaintenancePage } from "@/components/maintenance/MaintenancePage";
-
-const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL;
+import { apiClient } from "@/lib/api-client";
 
 export default function Home() {
   const { data: session }: { data: Session | null } = useSession();
@@ -32,11 +31,8 @@ export default function Home() {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const response = await fetch(`${BACKEND_API_URL}/settings`);
-        if (response.ok) {
-          const data = await response.json();
-          setApiKeyThreshold(data.api_key_star_threshold);
-        }
+        const { api_key_star_threshold } = await apiClient.getSettings();
+        setApiKeyThreshold(api_key_star_threshold);
       } catch (error) {
         console.error('Error fetching settings:', error);
       }

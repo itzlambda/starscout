@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
+import { apiClient } from '@/lib/api-client';
 
-const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL;
 const HEALTH_CHECK_INTERVAL = 10000; // Check every 10 seconds
 
 export function useBackendHealth() {
@@ -9,12 +9,8 @@ export function useBackendHealth() {
   useEffect(() => {
     const checkHealth = async () => {
       try {
-        const response = await fetch(`${BACKEND_API_URL}/`);
-        if (!response.ok) {
-          throw new Error('Backend health check failed');
-        }
-        const data = await response.json();
-        setIsBackendHealthy(data.status === 'healthy');
+        const { status } = await apiClient.checkHealth();
+        setIsBackendHealthy(status === 'healthy');
       } catch (error) {
         console.error('Backend health check error:', error);
         setIsBackendHealthy(false);
