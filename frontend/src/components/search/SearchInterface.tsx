@@ -12,10 +12,10 @@ import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ApiKeyInput, ApiKeyInputRef } from './ApiKeyInput';
 import { apiClient } from '@/lib/api-client';
-import { useUserExists } from '@/hooks/useUserExists';
 import { useInitialization } from '@/hooks/useInitialization';
 import { useSearchCache } from '@/hooks/useSearchCache';
 import { useRateLimit } from '@/hooks/useRateLimit';
+import { useUserExistsCheck } from '@/hooks/useSwrApi';
 
 interface SearchInterfaceProps {
   onRefreshStars: (apiKey?: string) => void;
@@ -33,15 +33,18 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
   const rateLimit = useRateLimit();
   const [searchError, setSearchError] = useState<string | null>(null);
   const apiKeyInputRef = useRef<ApiKeyInputRef>(null);
-  const { checkUserExists } = useUserExists();
+
   const { hasInitializationBeenAttempted, markInitializationAttempted } = useInitialization();
   const searchCache = useSearchCache();
+
+  // Use SWR for caching user existence check
+  const { userExists, isLoadingUserExists } = useUserExistsCheck(session?.accessToken);
 
   useEffect(() => {
     const initializeUser = async () => {
       try {
-        const exists = await checkUserExists(session?.accessToken || '');
-        if (!exists) {
+        // Use cached user existence from SWR
+        if (!userExists && !isLoadingUserExists) {
           await onRefreshStars(apiKey);
         }
       } catch (error) {
@@ -49,14 +52,14 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
       }
     };
 
-    // Run initialization only once per browser session to avoid infinite retry loops
-    if (session?.accessToken && !hasInitializationBeenAttempted()) {
+    // Run initialization only once per browser session and when user existence data is available
+    if (session?.accessToken && !hasInitializationBeenAttempted() && !isLoadingUserExists) {
       markInitializationAttempted();
       initializeUser();
     }
     // Intentionally exclude `onRefreshStars` from dependencies to keep the effect stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.accessToken, apiKey]);
+  }, [session?.accessToken, apiKey, userExists, isLoadingUserExists]);
 
   // Memoized repository transformation function
   const transformRepositories = useCallback((reposArray: (SearchResult | Repository)[]): Repository[] => {
