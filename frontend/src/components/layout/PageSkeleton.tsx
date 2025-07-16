@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { GradientBackground } from "@/components/ui/GradientBackground";
 
 /**
  * Skeleton for the main page while loading stars count and initial data
@@ -31,14 +32,14 @@ export function PageSkeleton() {
             </nav>
 
             {/* Main content skeleton */}
-            <main className="flex-1 flex flex-col items-center justify-center bg-gradient-to-b from-background via-background/95 to-background/90 px-4 pt-24 pb-4">
+            <GradientBackground className="flex-1 flex flex-col items-center justify-center px-4 pt-24 pb-4">
                 <div className="w-full max-w-4xl">
                     <div className="space-y-8">
                         {/* Content area skeleton */}
                         <Skeleton className="h-[400px] w-full rounded-xl" />
                     </div>
                 </div>
-            </main>
+            </GradientBackground>
 
             {/* Footer placeholder */}
             <div className="h-16 border-t border-border" />

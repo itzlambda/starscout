@@ -6,7 +6,7 @@ import { Info, RefreshCw, Loader2, AlertTriangle } from 'lucide-react';
 import { SearchInput } from './SearchInput';
 import { SearchResults } from './SearchResults';
 import { RateLimitError } from './RateLimitError';
-import type { Repository, SearchResult } from '@/types/github';
+import type { Repository } from '@/types/github';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -16,6 +16,8 @@ import { useInitialization } from '@/hooks/useInitialization';
 import { useSearchCache } from '@/hooks/useSearchCache';
 import { useRateLimit } from '@/hooks/useRateLimit';
 import { useUserExistsCheck } from '@/hooks/useSwrApi';
+import { transformRepositories } from '@/lib/repository-utils';
+import { parseApiError, createApiKeyRequiredMessage } from '@/lib/api-error-utils';
 
 interface SearchInterfaceProps {
   onRefreshStars: (apiKey?: string) => void;
@@ -79,29 +81,7 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.accessToken, apiKey, userExists, isLoadingUserExists, exceedsStarThreshold]);
 
-  // Memoized repository transformation function
-  const transformRepositories = useCallback((reposArray: (SearchResult | Repository)[]): Repository[] => {
-    return reposArray.map((item: SearchResult | Repository) => {
-      const repo = 'repository' in item ? item.repository : item;
-      // Handle the backend API response structure
-      const ownerLogin = typeof repo.owner === 'string' ? repo.owner : repo.owner?.login || 'unknown';
 
-      return {
-        id: typeof repo.id === 'string' ? parseInt(repo.id, 10) : repo.id,
-        name: repo.name,
-        fullName: `${ownerLogin}/${repo.name}`,
-        description: repo.description,
-        url: (repo as unknown as { homepage_url?: string }).homepage_url || repo.url || `https://github.com/${ownerLogin}/${repo.name}`,
-        topics: repo.topics || [],
-        owner: {
-          login: ownerLogin,
-          avatarUrl: typeof repo.owner === 'object' && repo.owner?.avatarUrl
-            ? repo.owner.avatarUrl
-            : `https://github.com/${ownerLogin}.png`,
-        },
-      } as Repository;
-    });
-  }, []);
 
   // Handle star refresh - invalidate cache
   const handleRefreshStars = useCallback((apiKey?: string) => {
@@ -110,10 +90,7 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
 
     // Check if API key is required for refresh and missing
     if (shouldDisableRefresh) {
-      const message = !userExists
-        ? `API key is required when you have more than ${apiKeyThreshold} stars and are a new user. Please provide your OpenAI API key below.`
-        : `API key is required to refresh stars when you have more than ${apiKeyThreshold} stars. Please provide your OpenAI API key below.`;
-
+      const message = createApiKeyRequiredMessage(userExists, apiKeyThreshold, 'refresh');
       setRefreshError(message);
       // Focus and highlight the API key input
       if (apiKeyInputRef.current) {
@@ -169,23 +146,9 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
       console.error("Error searching repositories:", error);
       setRepositories([]); // Clear previous results
 
-      // Extract user-friendly error message
-      let errorMessage = 'An unexpected error occurred while searching. Please try again.';
-      if (error instanceof Error) {
-        const message = error.message.toLowerCase();
-        if (message.includes('incorrect api key') || message.includes('invalid_api_key')) {
-          errorMessage = 'Invalid OpenAI API key. Please check your API key and try again.';
-        } else if (message.includes('rate limit') || message.includes('too many requests')) {
-          errorMessage = 'Too many requests. Please wait a moment and try again.';
-        } else if (message.includes('network') || message.includes('fetch')) {
-          errorMessage = 'Network error. Please check your connection and try again.';
-        } else {
-          // For other errors, show a generic message but log the full error
-          errorMessage = 'Search failed. Please try again later.';
-        }
-      }
-
-      setSearchError(errorMessage);
+      // Parse error and get user-friendly message
+      const parsedError = parseApiError(error);
+      setSearchError(parsedError.message);
     } finally {
       setIsLoading(false);
     }
@@ -215,7 +178,7 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
           <SearchInput
             onSearch={handleSearch}
             disabled={shouldDisableSearch}
-            disabledTooltip={shouldDisableSearch ? `API key is required to search when you have more than ${apiKeyThreshold} stars and are a new user. Please provide your OpenAI API key below.` : undefined}
+            disabledTooltip={shouldDisableSearch ? createApiKeyRequiredMessage(userExists, apiKeyThreshold, 'search') : undefined}
           />
 
           {/* Refresh Error */}

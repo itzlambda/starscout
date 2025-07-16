@@ -1,8 +1,9 @@
 import { AlertTriangle } from "lucide-react"
+import { GradientBackground } from "@/components/ui/GradientBackground"
 
 export function MaintenancePage() {
     return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-background via-background/95 to-background/90 px-4">
+        <GradientBackground className="min-h-screen flex flex-col items-center justify-center px-4">
             <div className="text-center space-y-6 max-w-lg">
                 <div className="flex justify-center">
                     <AlertTriangle className="h-16 w-16 text-yellow-500" />
@@ -15,6 +16,6 @@ export function MaintenancePage() {
                     The page will automatically refresh when services are back online.
                 </p>
             </div>
-        </div>
+        </GradientBackground>
     )
 } 

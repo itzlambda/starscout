@@ -4,8 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Info } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipIconButton } from "@/components/ui/tooltip-icon-button";
 import { forwardRef, useImperativeHandle, useRef, useState, useId } from "react";
 
 interface ApiKeyInputProps {
@@ -82,27 +81,14 @@ export const ApiKeyInput = forwardRef<ApiKeyInputRef, ApiKeyInputProps>(({
             )}
 
             <div className="absolute right-1 top-0 bottom-0 flex items-center">
-                <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                type="button"
-                                className="h-7 w-7 cursor-pointer text-muted-foreground hover:text-foreground"
-                                aria-label="OpenAI API Key for refreshing information"
-                                aria-describedby={helpId}
-                            >
-                                <Info className="h-4 w-4" aria-hidden="true" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent id={helpId} role="tooltip" className="max-w-sm">
-                            <p className="text-center">
-                                {helpText}
-                            </p>
-                        </TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
+                <TooltipIconButton
+                    icon={Info}
+                    tooltip={helpText}
+                    type="button"
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                    ariaLabel="OpenAI API Key for refreshing information"
+                    tooltipClassName="max-w-sm"
+                />
             </div>
         </div>
     );
