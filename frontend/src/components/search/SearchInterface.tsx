@@ -181,7 +181,7 @@ export function SearchInterface({ onRefreshStars, totalStars, apiKeyThreshold, a
           errorMessage = 'Network error. Please check your connection and try again.';
         } else {
           // For other errors, show a generic message but log the full error
-          errorMessage = 'Search failed. Please try again or contact support if the issue persists.';
+          errorMessage = 'Search failed. Please try again later.';
         }
       }
 

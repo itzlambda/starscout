@@ -68,7 +68,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                         Something went wrong
                     </h2>
                     <p className="text-sm text-muted-foreground mb-4 max-w-md">
-                        An unexpected error occurred. You can try refreshing this section or contact support if the problem persists.
+                        An unexpected error occurred. You can try refreshing this section or reloading the page.
                     </p>
 
                     <div className="flex gap-2">

@@ -5,13 +5,13 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Star, Search } from 'lucide-react';
 
 interface OnboardingContentProps {
-  onStartProcessing: (apiKey?: string) => void;
+  onNavigateToSearch: () => void;
   apiKeyThreshold: number;
 }
 
-export function OnboardingContent({ onStartProcessing, apiKeyThreshold }: OnboardingContentProps) {
+export function OnboardingContent({ onNavigateToSearch, apiKeyThreshold }: OnboardingContentProps) {
   const handleStart = () => {
-    onStartProcessing();
+    onNavigateToSearch();
   };
 
   return (
@@ -203,9 +203,9 @@ export function OnboardingContent({ onStartProcessing, apiKeyThreshold }: Onboar
 
         <Card>
           <CardHeader>
-            <CardTitle>Ready to Start?</CardTitle>
+            <CardTitle>Ready to Search?</CardTitle>
             <CardDescription>
-              Click Start to begin processing your starred repositories.
+              Go to the search interface to start exploring your starred repositories.
             </CardDescription>
           </CardHeader>
           <CardFooter>
@@ -213,7 +213,7 @@ export function OnboardingContent({ onStartProcessing, apiKeyThreshold }: Onboar
               onClick={handleStart}
               className="w-full"
             >
-              Start Processing Stars
+              Go to Search
             </Button>
           </CardFooter>
         </Card>

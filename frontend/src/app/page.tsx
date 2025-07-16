@@ -83,7 +83,7 @@ export default function Home() {
             {currentView === 'home' ? (
               <ErrorBoundary>
                 <OnboardingContent
-                  onStartProcessing={handleStartProcessing}
+                  onNavigateToSearch={() => handleNavigation('search')}
                   apiKeyThreshold={apiKeyThreshold}
                 />
               </ErrorBoundary>
